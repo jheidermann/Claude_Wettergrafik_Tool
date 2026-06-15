@@ -62,6 +62,10 @@
     <h1>Wettergrafik</h1>
 
     <div class="field">
+      <label for="chartTitle">Überschrift</label>
+      <input type="text" id="chartTitle" placeholder="Temperatur">
+    </div>
+    <div class="field">
       <label for="series">Datenreihe</label>
       <select id="series"></select>
     </div>
@@ -157,7 +161,7 @@ const PH ={uhrzeit:"z. B. 06:00",stunden:"z. B. 6",tage:"z. B. Mo",datum:"z. B. 
 const CAP={uhrzeit:"Uhrzeit",stunden:"Stunden",tage:"Wochentag",datum:"Datum",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
-const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markants:false,data:[]};
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markants:false,chartTitle:"",data:[]};
 
 function exampleData(){
   const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
@@ -186,16 +190,19 @@ updateSwatch();
 colorSel.onchange=e=>{state.color=e.target.value;updateSwatch();draw();};
 
 const seriesSel=document.getElementById("series"),unitInput=document.getElementById("unit"),
-      nameInput=document.getElementById("name"),nameField=document.getElementById("nameField");
+      nameInput=document.getElementById("name"),nameField=document.getElementById("nameField"),
+      chartTitleInput=document.getElementById("chartTitle");
 SERIES.forEach(s=>{const o=document.createElement("option");o.value=s.name;o.textContent=s.label||s.name;seriesSel.appendChild(o);});
 seriesSel.onchange=e=>{
   const v=e.target.value;
-  if(v==="__custom__"){nameField.style.display="";nameInput.focus();}
+  if(v==="__custom__"){nameField.style.display="";nameInput.focus();chartTitleInput.placeholder=state.name;}
   else{const s=SERIES.find(x=>x.name===v);state.name=s.name;state.unit=s.unit;
-    nameInput.value=s.name;unitInput.value=s.unit;nameField.style.display="none";}
+    nameInput.value=s.name;unitInput.value=s.unit;nameField.style.display="none";
+    chartTitleInput.placeholder=s.name;}
   draw();};
-nameInput.oninput=e=>{state.name=e.target.value;draw();};
+nameInput.oninput=e=>{state.name=e.target.value;chartTitleInput.placeholder=e.target.value;draw();};
 unitInput.oninput=e=>{state.unit=e.target.value;draw();};
+chartTitleInput.oninput=e=>{state.chartTitle=e.target.value;draw();};
 
 const xformatSel=document.getElementById("xformat"),xlabelInput=document.getElementById("xlabel");
 xformatSel.onchange=e=>{state.xformat=e.target.value;
@@ -243,48 +250,59 @@ function formatNum(v){const r=Math.round(v*100)/100;return (Number.isInteger(r)?
 /* ---- Gemeinsamer Renderer ---- */
 function renderChart(ctx,W,H,c){
   const pts=state.data.filter(d=>d.value!=null&&isFinite(d.value));
-  ctx.fillStyle=INK;ctx.font="700 "+c.title+"px "+FONT;ctx.textAlign="left";ctx.textBaseline="alphabetic";
-  const unit=state.unit?(" ("+state.unit+")"):"";
-  ctx.fillText((state.name||"Datenreihe")+unit,c.padL,c.titleY);
+  /* Ueberschrift: eingetippter Text, sonst Serienname als Fallback */
+  const titleText=state.chartTitle.trim()||state.name||"";
+  if(titleText){
+    ctx.fillStyle=INK;ctx.font="700 "+c.title+"px "+FONT;ctx.textAlign="left";ctx.textBaseline="alphabetic";
+    ctx.fillText(titleText,c.padL,c.titleY);}
 
   if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
-    ctx.fillText("Keine Daten – links Werte eingeben oder „Beispiel laden“.",W/2,H/2);return;}
+    ctx.fillText("Keine Daten - links Werte eingeben oder Beispiel laden.",W/2,H/2);return;}
 
   const plotW=W-c.padL-c.padR,plotH=H-c.padT-c.padB,bottom=c.padT+plotH,n=pts.length;
   /* kleiner Einzug links/rechts, damit Daten nicht an y-Achse bzw. rechtem Rand kleben */
   const ins=Math.min(plotW*0.05,(plotW/n)*0.6),innerW=plotW-2*ins,x0=c.padL+ins,band=innerW/n;
   let vMin=Math.min(...pts.map(p=>p.value)),vMax=Math.max(...pts.map(p=>p.value));
-  if(state.type==="bar")vMin=Math.min(0,vMin);
+  /* Balken immer ab 0; Linie ab 0 wenn alle Werte >= 0, sonst ab Datenwert */
+  if(state.type==="bar"||vMin>=0)vMin=Math.min(0,vMin);
   if(vMin===vMax){vMin-=1;vMax+=1;}
   const step=niceStep(vMax-vMin,5);
   vMin=Math.floor(vMin/step)*step;vMax=Math.ceil(vMax/step)*step;
-  if(state.markants)vMax+=step; /* Kopffreiheit für die Wertbeschriftung */
+  if(state.markants)vMax+=step; /* Kopffreiheit fuer die Wertbeschriftung */
   const X=i=> state.type==="bar" ? x0+band*(i+0.5) : x0+(n===1?innerW/2:innerW*i/(n-1));
   const y=v=>c.padT+plotH*(1-(v-vMin)/(vMax-vMin));
 
   let maxI=0,minI=0;pts.forEach((p,i)=>{if(p.value>pts[maxI].value)maxI=i;if(p.value<pts[minI].value)minI=i;});
 
-  /* Gitter + y */
+  /* Gitter + y-Achse */
   ctx.strokeStyle=GRID;ctx.lineWidth=Math.max(1,c.lineW/3);ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;
   ctx.textAlign="right";ctx.textBaseline="middle";
   for(let v=vMin;v<=vMax+1e-9;v+=step){const yy=y(v);
     ctx.beginPath();ctx.moveTo(c.padL,yy);ctx.lineTo(W-c.padR,yy);ctx.stroke();
     ctx.fillText(formatNum(v),c.padL-c.axis*0.55,yy);}
+  /* Einheit einmalig ueber der Plotflaeche */
+  if(state.unit){
+    ctx.fillStyle=INK_SOFT;ctx.font="600 "+Math.round(c.axis*0.85)+"px "+FONT;
+    ctx.textAlign="right";ctx.textBaseline="alphabetic";
+    ctx.fillText(state.unit,c.padL-c.axis*0.55,c.padT-Math.round(c.axis*1.4));}
 
-  /* x-Achse: Labels - index-basiert (jeder k-te Punkt), zentriert unter Punkt/Balken */
-  ctx.textBaseline="top";ctx.font=c.axis+"px "+FONT;ctx.fillStyle=INK_SOFT;
+  /* x-Achse: Labels + Tick-Striche */
+  ctx.font=c.axis+"px "+FONT;ctx.fillStyle=INK_SOFT;ctx.textBaseline="top";
   let maxLabelW=0;
   for(let i=0;i<n;i++){const w=ctx.measureText(pts[i].time||"").width;if(w>maxLabelW)maxLabelW=w;}
-  const minGap=maxLabelW+c.axis*1.2;                       /* Mindestabstand = breitestes Label + Puffer */
+  const minGap=maxLabelW+c.axis*1.2;
   const pxStep=state.type==="bar"?band:(n>1?innerW/(n-1):innerW);
-  let stepK=Math.max(1,Math.ceil(n/10));                   /* Dichte-Ziel ~10 Labels (bei 24 -> jeder 3.) */
-  while(stepK<n && pxStep*stepK<minGap) stepK++;           /* bei Ueberlappung weiter ausduennen */
+  let stepK=Math.max(1,Math.ceil(n/10));
+  while(stepK<n&&pxStep*stepK<minGap)stepK++;
+  const tickH=Math.round(c.axis*0.4);
   for(let i=0;i<n;i+=stepK){
     const t=pts[i].time||"";if(!t)continue;
     const px=X(i),half=ctx.measureText(t).width/2,m=2;
-    /* immer center; nur ausweichen, wenn das Label am echten Bildrand abgeschnitten wuerde */
-    ctx.textAlign = (px-half<m) ? "left" : (px+half>W-m ? "right" : "center");
-    ctx.fillText(t,px,bottom+c.tickGap);
+    ctx.strokeStyle=GRID;ctx.lineWidth=Math.max(1,c.lineW/3);
+    ctx.beginPath();ctx.moveTo(px,bottom);ctx.lineTo(px,bottom+tickH);ctx.stroke();
+    ctx.fillStyle=INK_SOFT;
+    ctx.textAlign=(px-half<m)?"left":(px+half>W-m?"right":"center");
+    ctx.fillText(t,px,bottom+tickH+Math.round(c.axis*0.3));
   }
   if(state.xlabel&&state.xlabel.trim()){
     ctx.fillStyle=INK;ctx.font="600 "+c.caption+"px "+FONT;ctx.textAlign="center";ctx.textBaseline="alphabetic";
@@ -326,7 +344,7 @@ function renderChart(ctx,W,H,c){
 }
 
 const PREVIEW   ={padL:92, padR:34,padT:70, padB:112,title:26,titleY:42,axis:20,tickGap:16,caption:22,captionGap:62, lineW:3,dot:4, mark:18,markR:5, markGap:13};
-const EXPORT_FULL={padL:140,padR:90,padT:120,padB:188,title:52,titleY:80,axis:36,tickGap:30,caption:40,captionGap:116,lineW:7,dot:9, mark:40,markR:12,markGap:26};
+const EXPORT_FULL={padL:140,padR:90,padT:120,padB:188,title:52,titleY:80,axis:36,tickGap:30,caption:40,captionGap:116,lineW:10,dot:9, mark:40,markR:12,markGap:26};
 const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:440}); /* ~20% (384px) rechts frei + Abstand */
 
 /* Vorschau */
