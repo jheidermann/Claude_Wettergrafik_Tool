@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wettergrafik</title>
+<style>
+  :root{
+    --bg:#FFF8EF;--ink:#235C7A;--ink-soft:#5E8298;--panel:#FFFFFF;
+    --border:rgba(35,92,122,.22);--grid:rgba(35,92,122,.14);--field:#FFFFFF;
+    --danger:#C61E1E;--accent:#235C7A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:16px;line-height:1.4;}
+  .wrap{display:grid;grid-template-columns:360px 1fr;height:100vh;}
+  .panel{background:var(--panel);border-right:1px solid var(--border);padding:24px 22px;overflow-y:auto;}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 3px;}
+  h1{font-size:24px;font-weight:700;margin:0 0 22px;letter-spacing:.01em;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
+  input[type=text],input[type=number],select{width:100%;background:var(--field);border:1px solid var(--border);
+    color:var(--ink);border-radius:8px;padding:9px 11px;font-size:15px;font-family:inherit;}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent;}
+  input::placeholder{color:#9fb2c4;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .seg{display:flex;background:var(--field);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .seg button{flex:1;background:none;border:none;color:var(--ink-soft);padding:9px 0;font-size:14px;font-family:inherit;cursor:pointer;}
+  .seg button.active{background:rgba(35,92,122,.10);color:var(--ink);font-weight:600;}
+  .color-pick{display:flex;align-items:center;gap:10px;}
+  .swatch{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);flex:none;}
+  .check{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink);cursor:pointer;}
+  .check input{width:auto;}
+  .full{width:100%;}
+  .divider{height:1px;background:var(--border);margin:20px 0 16px;}
+  .tbl-head{display:grid;grid-template-columns:1fr 1fr 30px;gap:8px;font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 7px;}
+  .data-row{display:grid;grid-template-columns:1fr 1fr 30px;gap:8px;margin-bottom:8px;align-items:center;}
+  .data-row input{padding:7px 9px;font-size:14px;}
+  .del{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:19px;line-height:1;padding:0;border-radius:5px;}
+  .del:hover{color:var(--danger);}
+  .btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .btn{background:var(--field);border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:9px 13px;font-size:14px;font-family:inherit;cursor:pointer;}
+  .btn:hover{border-color:var(--accent);}
+  .btn.primary{background:var(--accent);color:#FFF8EF;border-color:var(--accent);font-weight:600;}
+  .stage{padding:24px;display:flex;flex-direction:column;min-width:0;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+  .toolbar .meta{font-size:13px;color:var(--ink-soft);}
+  .toolbar .grp{display:flex;gap:8px;}
+  .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:14px;position:relative;min-height:0;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;}
+  .hint{font-size:13px;color:var(--ink-soft);margin-top:14px;}
+  @media (max-width:760px){.wrap{grid-template-columns:1fr;height:auto;}
+    .panel{border-right:none;border-bottom:1px solid var(--border);}.canvas-box{min-height:46vh;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="panel">
+    <p class="eyebrow">Wetterdaten · TV</p>
+    <h1>Wettergrafik</h1>
+
+    <div class="field">
+      <label for="series">Datenreihe</label>
+      <select id="series"></select>
+    </div>
+    <div class="field" id="nameField" style="display:none">
+      <label for="name">Eigene Bezeichnung</label>
+      <input type="text" id="name" value="Temperatur">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="unit">Einheit</label>
+        <input type="text" id="unit" value="°C">
+      </div>
+      <div class="field">
+        <label>Diagrammtyp</label>
+        <div class="seg" id="typeSeg">
+          <button data-type="line" class="active">Linie</button>
+          <button data-type="bar">Balken</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="color">Farbe (Linie / Balken)</label>
+      <div class="color-pick">
+        <span class="swatch" id="swatch"></span>
+        <select id="color"></select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="xformat">x-Achse: Format</label>
+      <select id="xformat">
+        <option value="uhrzeit">Uhrzeit (00:00)</option>
+        <option value="stunden">Stunden (0, 1, 2 …)</option>
+        <option value="tage">Wochentage (Mo, Di …)</option>
+        <option value="datum">Datum (TT.MM.)</option>
+        <option value="eigene">Eigene</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="xlabel">Achsenbeschriftung</label>
+      <input type="text" id="xlabel" value="Uhrzeit">
+    </div>
+    <button class="btn full" id="fillTime">Zeitspalte nach Format füllen</button>
+
+    <div class="field" style="margin-top:16px;">
+      <label class="check"><input type="checkbox" id="markants"> Höchst-/Tiefstwert hervorheben</label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tbl-head"><span>Zeit / Label</span><span>Wert</span><span></span></div>
+    <div id="rows"></div>
+
+    <div class="btns">
+      <button class="btn primary" id="addRow">+ Zeile</button>
+      <button class="btn" id="loadExample">Beispiel laden</button>
+      <button class="btn" id="clearAll">Leeren</button>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="toolbar">
+      <span class="meta">Export 16:9 · 1920 × 1080 px</span>
+      <div class="grp">
+        <button class="btn primary" id="exportFull">⤓ Vollbild</button>
+        <button class="btn" id="exportRight">⤓ 20 % frei rechts</button>
+      </div>
+    </div>
+    <div class="canvas-box"><canvas id="chart"></canvas></div>
+    <p class="hint">Arbeitsansicht passt sich dem Fenster an. „20 % frei rechts" hält rechts Platz für Moderator*innen frei. Offline lauffähig.</p>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+const PALETTE=[
+  {name:"Orange",hex:"#FF8B00"},{name:"Rot",hex:"#C61E1E"},{name:"Blau",hex:"#0979BA"},
+  {name:"Petrol",hex:"#235C7A"},{name:"Grün",hex:"#27C448"},{name:"Teal",hex:"#317C6F"},
+  {name:"Violett",hex:"#71207F"},{name:"Dunkelblau",hex:"#1D1C70"},{name:"Bordeaux",hex:"#A6254B"},
+  {name:"Gelb",hex:"#FEC804"},{name:"Anthrazit",hex:"#3D3E46"},{name:"Grau",hex:"#95989C"}
+];
+const SERIES=[
+  {name:"Temperatur",unit:"°C"},{name:"Niederschlag",unit:"mm"},
+  {name:"Wind",unit:"km/h"},{name:"Windstärke",unit:"Bft"},
+  {name:"Luftfeuchte",unit:"%"},{name:"Bedeckung",unit:"%"},
+  {name:"Luftdruck",unit:"hPa"},{name:"Sonnenschein",unit:"h"},
+  {name:"Schnee",unit:"cm"},{name:"UV-Index",unit:"UV"},
+  {name:"__custom__",label:"Eigene …"}
+];
+const PH ={uhrzeit:"z. B. 06:00",stunden:"z. B. 6",tage:"z. B. Mo",datum:"z. B. 14.06.",eigene:"Label"};
+const CAP={uhrzeit:"Uhrzeit",stunden:"Stunden",tage:"Wochentag",datum:"Datum",eigene:""};
+const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
+
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markants:false,data:[]};
+
+function exampleData(){
+  const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
+  return v.map((value,i)=>({time:String(i).padStart(2,"0")+":00",value}));
+}
+function pad2(n){return String(n).padStart(2,"0");}
+function fmtDate(d){return pad2(d.getDate())+"."+pad2(d.getMonth()+1)+".";}
+function parseDate(s){const m=String(s).match(/^\s*(\d{1,2})\.(\d{1,2})\.?\s*(\d{2,4})?/);if(!m)return null;
+  let yr=m[3]?+m[3]:new Date().getFullYear();if(yr<100)yr+=2000;const d=new Date(yr,+m[2]-1,+m[1]);
+  if(isNaN(d.getTime()))return null;d.setHours(0,0,0,0);return d;}
+/* Liefert eine Sequenzfunktion i=>Label, die beim Inhalt des ersten Feldes beginnt */
+function fillFrom(fmt,first){
+  if(fmt==="stunden"){let s=parseInt(first,10);if(isNaN(s))s=0;return i=>String(s+i);}
+  if(fmt==="uhrzeit"){let h=0;const m=String(first).match(/^\s*(\d{1,2})/);if(m)h=parseInt(m[1],10)%24;return i=>pad2((h+i)%24)+":00";}
+  if(fmt==="tage"){let idx=WD.findIndex(d=>d.toLowerCase()===String(first).trim().toLowerCase());if(idx<0)idx=0;return i=>WD[(idx+i)%7];}
+  if(fmt==="datum"){let b=parseDate(first);if(!b){b=new Date();b.setHours(0,0,0,0);}return i=>{const d=new Date(b);d.setDate(b.getDate()+i);return fmtDate(d);};}
+  return ()=>"";
+}
+
+/* Dropdowns */
+const colorSel=document.getElementById("color"),swatch=document.getElementById("swatch");
+PALETTE.forEach(c=>{const o=document.createElement("option");o.value=c.hex;o.textContent=c.name;
+  if(c.hex===state.color)o.selected=true;colorSel.appendChild(o);});
+function updateSwatch(){swatch.style.background=state.color;}
+updateSwatch();
+colorSel.onchange=e=>{state.color=e.target.value;updateSwatch();draw();};
+
+const seriesSel=document.getElementById("series"),unitInput=document.getElementById("unit"),
+      nameInput=document.getElementById("name"),nameField=document.getElementById("nameField");
+SERIES.forEach(s=>{const o=document.createElement("option");o.value=s.name;o.textContent=s.label||s.name;seriesSel.appendChild(o);});
+seriesSel.onchange=e=>{
+  const v=e.target.value;
+  if(v==="__custom__"){nameField.style.display="";nameInput.focus();}
+  else{const s=SERIES.find(x=>x.name===v);state.name=s.name;state.unit=s.unit;
+    nameInput.value=s.name;unitInput.value=s.unit;nameField.style.display="none";}
+  draw();};
+nameInput.oninput=e=>{state.name=e.target.value;draw();};
+unitInput.oninput=e=>{state.unit=e.target.value;draw();};
+
+const xformatSel=document.getElementById("xformat"),xlabelInput=document.getElementById("xlabel");
+xformatSel.onchange=e=>{state.xformat=e.target.value;
+  if(state.xformat!=="eigene"){state.xlabel=CAP[state.xformat];xlabelInput.value=state.xlabel;}
+  renderRows();draw();};
+document.getElementById("fillTime").onclick=()=>{
+  if(state.xformat==="eigene"||!state.data.length)return;
+  const seq=fillFrom(state.xformat,state.data[0].time);
+  state.data.forEach((row,i)=>{row.time=seq(i);});
+  renderRows();draw();};
+
+/* Tabelle */
+const rowsEl=document.getElementById("rows");
+function renderRows(){rowsEl.innerHTML="";
+  const ph=PH[state.xformat]||"Label";
+  state.data.forEach((row,i)=>{const div=document.createElement("div");div.className="data-row";
+    div.innerHTML='<input type="text" placeholder="'+ph+'" value="'+escapeAttr(row.time)+'" data-i="'+i+'" data-k="time">'+
+      '<input type="number" step="any" value="'+(row.value??"")+'" data-i="'+i+'" data-k="value">'+
+      '<button class="del" data-i="'+i+'" title="Zeile löschen">×</button>';
+    rowsEl.appendChild(div);});}
+function escapeAttr(s){return String(s).replace(/"/g,"&quot;");}
+rowsEl.addEventListener("input",e=>{const i=+e.target.dataset.i,k=e.target.dataset.k;
+  if(k==="time")state.data[i].time=e.target.value;
+  else if(k==="value"){const n=parseFloat(e.target.value.replace(",",".")); state.data[i].value=isNaN(n)?null:n;}
+  draw();});
+rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);renderRows();draw();}});
+document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});renderRows();draw();};
+document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
+  state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
+  seriesSel.value="Temperatur";nameField.style.display="none";
+  nameInput.value=state.name;unitInput.value=state.unit;renderRows();draw();};
+document.getElementById("clearAll").onclick=()=>{state.data=[];renderRows();draw();};
+xlabelInput.oninput=e=>{state.xlabel=e.target.value;draw();};
+document.getElementById("markants").onchange=e=>{state.markants=e.target.checked;draw();};
+document.getElementById("typeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  state.type=b.dataset.type;[...e.currentTarget.children].forEach(x=>x.classList.toggle("active",x===b));draw();});
+
+const INK="#235C7A",INK_SOFT="#5E8298",GRID="rgba(35,92,122,.16)";
+const FONT='-apple-system,"Segoe UI",Roboto,sans-serif';
+function hexToRgba(hex,a){const n=parseInt(hex.slice(1),16);return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";}
+function niceStep(range,t){const raw=range/t,mag=Math.pow(10,Math.floor(Math.log10(raw))),norm=raw/mag;
+  let s;if(norm<1.5)s=1;else if(norm<3)s=2;else if(norm<7)s=5;else s=10;return s*mag;}
+function formatNum(v){const r=Math.round(v*100)/100;return (Number.isInteger(r)?r:r.toFixed(2)).toString().replace(".",",");}
+
+/* ---- Gemeinsamer Renderer ---- */
+function renderChart(ctx,W,H,c){
+  const pts=state.data.filter(d=>d.value!=null&&isFinite(d.value));
+  ctx.fillStyle=INK;ctx.font="700 "+c.title+"px "+FONT;ctx.textAlign="left";ctx.textBaseline="alphabetic";
+  const unit=state.unit?(" ("+state.unit+")"):"";
+  ctx.fillText((state.name||"Datenreihe")+unit,c.padL,c.titleY);
+
+  if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
+    ctx.fillText("Keine Daten – links Werte eingeben oder „Beispiel laden“.",W/2,H/2);return;}
+
+  const plotW=W-c.padL-c.padR,plotH=H-c.padT-c.padB,bottom=c.padT+plotH,n=pts.length,band=plotW/n;
+  let vMin=Math.min(...pts.map(p=>p.value)),vMax=Math.max(...pts.map(p=>p.value));
+  if(state.type==="bar")vMin=Math.min(0,vMin);
+  if(vMin===vMax){vMin-=1;vMax+=1;}
+  const step=niceStep(vMax-vMin,5);
+  vMin=Math.floor(vMin/step)*step;vMax=Math.ceil(vMax/step)*step;
+  if(state.markants)vMax+=step; /* Kopffreiheit für die Wertbeschriftung */
+  const X=i=> state.type==="bar" ? c.padL+band*(i+0.5) : c.padL+(n===1?plotW/2:plotW*i/(n-1));
+  const y=v=>c.padT+plotH*(1-(v-vMin)/(vMax-vMin));
+
+  let maxI=0,minI=0;pts.forEach((p,i)=>{if(p.value>pts[maxI].value)maxI=i;if(p.value<pts[minI].value)minI=i;});
+
+  /* Gitter + y */
+  ctx.strokeStyle=GRID;ctx.lineWidth=Math.max(1,c.lineW/3);ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;
+  ctx.textAlign="right";ctx.textBaseline="middle";
+  for(let v=vMin;v<=vMax+1e-9;v+=step){const yy=y(v);
+    ctx.beginPath();ctx.moveTo(c.padL,yy);ctx.lineTo(W-c.padR,yy);ctx.stroke();
+    ctx.fillText(formatNum(v),c.padL-c.axis*0.55,yy);}
+
+  /* x */
+  ctx.textBaseline="top";ctx.font=c.axis+"px "+FONT;ctx.fillStyle=INK_SOFT;
+  const every=Math.ceil(n/10),drawn=[];
+  for(let i=0;i<n;i++){if(i%every===0)drawn.push(i);}
+  drawn.forEach((i,k)=>{
+    ctx.textAlign = k===0 ? "left" : (k===drawn.length-1 ? "right" : "center");
+    ctx.fillText(pts[i].time||"",X(i),bottom+c.tickGap);});
+  if(state.xlabel&&state.xlabel.trim()){
+    ctx.fillStyle=INK;ctx.font="600 "+c.caption+"px "+FONT;ctx.textAlign="center";ctx.textBaseline="alphabetic";
+    ctx.fillText(state.xlabel,c.padL+plotW/2,bottom+c.captionGap);}
+
+  /* Serie */
+  if(state.type==="bar"){
+    const bw=Math.max(2,band*0.6),base=y(Math.max(0,vMin));
+    pts.forEach((p,i)=>{const yy=y(p.value);
+      ctx.fillStyle=(state.markants&&i!==maxI&&i!==minI)?hexToRgba(state.color,.4):state.color;
+      ctx.fillRect(X(i)-bw/2,Math.min(yy,base),bw,Math.abs(base-yy));});
+  }else{
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(X(i),y(p.value)):ctx.moveTo(X(i),y(p.value)));
+    ctx.lineTo(X(n-1),bottom);ctx.lineTo(X(0),bottom);ctx.closePath();
+    ctx.fillStyle=hexToRgba(state.color,.12);ctx.fill();
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(X(i),y(p.value)):ctx.moveTo(X(i),y(p.value)));
+    ctx.strokeStyle=state.color;ctx.lineWidth=c.lineW;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
+  }
+
+  /* Markante Punkte */
+  if(state.markants){
+    const top=c.padT;
+    const drawMark=(idx,isMax)=>{
+      const px=X(idx),py=y(pts[idx].value);
+      if(state.type==="line"){
+        ctx.beginPath();ctx.arc(px,py,c.markR,0,7);ctx.fillStyle=state.color;ctx.fill();
+        ctx.lineWidth=Math.max(2,c.markR*0.4);ctx.strokeStyle="#FFF8EF";ctx.stroke();}
+      const lbl=formatNum(pts[idx].value)+(state.unit?(" "+state.unit):"");
+      ctx.font="700 "+c.mark+"px "+FONT;ctx.fillStyle=INK;ctx.textAlign="center";
+      let above=(state.type==="bar")?true:isMax;
+      if(above&&py-c.markGap-c.mark<top)above=false;
+      if(!above&&py+c.markGap+c.mark>bottom)above=true;
+      if(above){ctx.textBaseline="alphabetic";ctx.fillText(lbl,px,py-c.markGap-c.markR);}
+      else{ctx.textBaseline="top";ctx.fillText(lbl,px,py+c.markGap+c.markR);}
+    };
+    drawMark(maxI,true);
+    if(minI!==maxI)drawMark(minI,false);
+  }
+}
+
+const PREVIEW   ={padL:92, padR:34,padT:70, padB:112,title:26,titleY:42,axis:20,tickGap:16,caption:22,captionGap:62, lineW:3,dot:4, mark:18,markR:5, markGap:13};
+const EXPORT_FULL={padL:140,padR:90,padT:120,padB:188,title:52,titleY:80,axis:36,tickGap:30,caption:40,captionGap:116,lineW:7,dot:9, mark:40,markR:12,markGap:26};
+const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:440}); /* ~20% (384px) rechts frei + Abstand */
+
+/* Vorschau */
+const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
+function draw(){
+  const dpr=window.devicePixelRatio||1,box=canvas.parentElement.getBoundingClientRect();
+  canvas.width=box.width*dpr;canvas.height=box.height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,box.width,box.height);
+  renderChart(ctx,box.width,box.height,PREVIEW);
+}
+
+/* Export */
+function slug(s){return ((s||"wettergrafik").trim().replace(/[^\wäöüÄÖÜß \-]/g,"").replace(/\s+/g,"_"))||"wettergrafik";}
+function doExport(cfg,suffix){
+  const ec=document.createElement("canvas");ec.width=1920;ec.height=1080;
+  const ex=ec.getContext("2d");
+  ex.fillStyle="#FFF8EF";ex.fillRect(0,0,1920,1080);
+  renderChart(ex,1920,1080,cfg);
+  ec.toBlob(blob=>{const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=slug(state.name)+suffix+".png";
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},"image/png");
+}
+document.getElementById("exportFull").onclick=()=>doExport(EXPORT_FULL,"_vollbild_169");
+document.getElementById("exportRight").onclick=()=>doExport(EXPORT_RIGHT,"_safe-rechts_169");
+
+state.data=exampleData();renderRows();
+new ResizeObserver(draw).observe(canvas.parentElement);
+draw();
+</script>
+</body>
+</html>
