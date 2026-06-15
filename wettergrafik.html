@@ -250,14 +250,16 @@ function renderChart(ctx,W,H,c){
   if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
     ctx.fillText("Keine Daten – links Werte eingeben oder „Beispiel laden“.",W/2,H/2);return;}
 
-  const plotW=W-c.padL-c.padR,plotH=H-c.padT-c.padB,bottom=c.padT+plotH,n=pts.length,band=plotW/n;
+  const plotW=W-c.padL-c.padR,plotH=H-c.padT-c.padB,bottom=c.padT+plotH,n=pts.length;
+  /* kleiner Einzug links/rechts, damit Daten nicht an y-Achse bzw. rechtem Rand kleben */
+  const ins=Math.min(plotW*0.05,(plotW/n)*0.6),innerW=plotW-2*ins,x0=c.padL+ins,band=innerW/n;
   let vMin=Math.min(...pts.map(p=>p.value)),vMax=Math.max(...pts.map(p=>p.value));
   if(state.type==="bar")vMin=Math.min(0,vMin);
   if(vMin===vMax){vMin-=1;vMax+=1;}
   const step=niceStep(vMax-vMin,5);
   vMin=Math.floor(vMin/step)*step;vMax=Math.ceil(vMax/step)*step;
   if(state.markants)vMax+=step; /* Kopffreiheit für die Wertbeschriftung */
-  const X=i=> state.type==="bar" ? c.padL+band*(i+0.5) : c.padL+(n===1?plotW/2:plotW*i/(n-1));
+  const X=i=> state.type==="bar" ? x0+band*(i+0.5) : x0+(n===1?innerW/2:innerW*i/(n-1));
   const y=v=>c.padT+plotH*(1-(v-vMin)/(vMax-vMin));
 
   let maxI=0,minI=0;pts.forEach((p,i)=>{if(p.value>pts[maxI].value)maxI=i;if(p.value<pts[minI].value)minI=i;});
@@ -269,13 +271,21 @@ function renderChart(ctx,W,H,c){
     ctx.beginPath();ctx.moveTo(c.padL,yy);ctx.lineTo(W-c.padR,yy);ctx.stroke();
     ctx.fillText(formatNum(v),c.padL-c.axis*0.55,yy);}
 
-  /* x */
+  /* x-Achse: Labels - index-basiert (jeder k-te Punkt), zentriert unter Punkt/Balken */
   ctx.textBaseline="top";ctx.font=c.axis+"px "+FONT;ctx.fillStyle=INK_SOFT;
-  const every=Math.ceil(n/10),drawn=[];
-  for(let i=0;i<n;i++){if(i%every===0)drawn.push(i);}
-  drawn.forEach((i,k)=>{
-    ctx.textAlign = k===0 ? "left" : (k===drawn.length-1 ? "right" : "center");
-    ctx.fillText(pts[i].time||"",X(i),bottom+c.tickGap);});
+  let maxLabelW=0;
+  for(let i=0;i<n;i++){const w=ctx.measureText(pts[i].time||"").width;if(w>maxLabelW)maxLabelW=w;}
+  const minGap=maxLabelW+c.axis*1.2;                       /* Mindestabstand = breitestes Label + Puffer */
+  const pxStep=state.type==="bar"?band:(n>1?innerW/(n-1):innerW);
+  let stepK=Math.max(1,Math.ceil(n/10));                   /* Dichte-Ziel ~10 Labels (bei 24 -> jeder 3.) */
+  while(stepK<n && pxStep*stepK<minGap) stepK++;           /* bei Ueberlappung weiter ausduennen */
+  for(let i=0;i<n;i+=stepK){
+    const t=pts[i].time||"";if(!t)continue;
+    const px=X(i),half=ctx.measureText(t).width/2,m=2;
+    /* immer center; nur ausweichen, wenn das Label am echten Bildrand abgeschnitten wuerde */
+    ctx.textAlign = (px-half<m) ? "left" : (px+half>W-m ? "right" : "center");
+    ctx.fillText(t,px,bottom+c.tickGap);
+  }
   if(state.xlabel&&state.xlabel.trim()){
     ctx.fillStyle=INK;ctx.font="600 "+c.caption+"px "+FONT;ctx.textAlign="center";ctx.textBaseline="alphabetic";
     ctx.fillText(state.xlabel,c.padL+plotW/2,bottom+c.captionGap);}
