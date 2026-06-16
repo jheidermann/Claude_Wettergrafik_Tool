@@ -220,7 +220,7 @@ function renderRows(){rowsEl.innerHTML="";
   const ph=PH[state.xformat]||"Label";
   state.data.forEach((row,i)=>{const div=document.createElement("div");div.className="data-row";
     div.innerHTML='<input type="text" placeholder="'+ph+'" value="'+escapeAttr(row.time)+'" data-i="'+i+'" data-k="time">'+
-      '<input type="number" step="any" value="'+(row.value??"")+'" data-i="'+i+'" data-k="value">'+
+      '<input type="text" inputmode="decimal" value="'+(row.value==null?"":escapeAttr(String(row.value).replace(".",",")))+'" data-i="'+i+'" data-k="value">'+
       '<button class="del" data-i="'+i+'" title="Zeile löschen">×</button>';
     rowsEl.appendChild(div);});}
 function escapeAttr(s){return String(s).replace(/"/g,"&quot;");}
@@ -254,7 +254,7 @@ function renderChart(ctx,W,H,c){
   const titleText=state.chartTitle.trim()||state.name||"";
   if(titleText){
     ctx.fillStyle=INK;ctx.font="700 "+c.title+"px "+FONT;ctx.textAlign="left";ctx.textBaseline="alphabetic";
-    ctx.fillText(titleText,c.padL,c.titleY);}
+    ctx.fillText(titleText,c.padL+c.title,c.titleY);}
 
   if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
     ctx.fillText("Keine Daten - links Werte eingeben oder Beispiel laden.",W/2,H/2);return;}
