@@ -7,8 +7,8 @@
 <style>
   :root{
     --bg:#FFF8EF;--ink:#235C7A;--ink-soft:#5E8298;--panel:#FFFFFF;
-    --border:rgba(35,92,122,.22);--grid:rgba(35,92,122,.14);--field:#FFFFFF;
-    --danger:#C61E1E;--accent:#235C7A;
+    --border:rgba(35,92,122,.22);--grid:rgba(35,92,122,.16);--field:#FFFFFF;
+    --danger:#C61E1E;--accent:#235C7A;--zeroline:rgba(35,92,122,.4);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;}
@@ -48,9 +48,12 @@
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
   .toolbar .meta{font-size:13px;color:var(--ink-soft);}
   .toolbar .grp{display:flex;gap:8px;}
-  .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:14px;position:relative;min-height:0;}
-  canvas{position:absolute;inset:0;width:100%;height:100%;}
+  .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:14px;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px;}
+  canvas{aspect-ratio:16/9;max-width:100%;max-height:100%;border-radius:8px;}
   .hint{font-size:13px;color:var(--ink-soft);margin-top:14px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn:disabled:hover{border-color:var(--border);}
+  #layoutSeg button{padding:9px 16px;}
   @media (max-width:760px){.wrap{grid-template-columns:1fr;height:auto;}
     .panel{border-right:none;border-bottom:1px solid var(--border);}.canvas-box{min-height:46vh;}}
 </style>
@@ -129,14 +132,14 @@
 
   <main class="stage">
     <div class="toolbar">
-      <span class="meta">Export 16:9 · 1920 × 1080 px</span>
-      <div class="grp">
-        <button class="btn primary" id="exportFull">⤓ Vollbild</button>
-        <button class="btn" id="exportRight">⤓ 20 % frei rechts</button>
+      <div class="seg" id="layoutSeg">
+        <button data-layout="full" class="active">Vollbild-Grafik</button>
+        <button data-layout="mod">Mod-Grafik</button>
       </div>
+      <button class="btn primary" id="exportBtn">⤓ PNG exportieren</button>
     </div>
     <div class="canvas-box"><canvas id="chart"></canvas></div>
-    <p class="hint">Arbeitsansicht passt sich dem Fenster an. „20 % frei rechts" hält rechts Platz für Moderator*innen frei. Offline lauffähig.</p>
+    <p class="hint">Vorschau zeigt das gewählte Layout in echtem 16:9. „Mod-Grafik" hält rechts Platz für Moderator*innen frei. Export gibt genau diese Ansicht als PNG aus (1920 × 1080). Offline lauffähig.</p>
   </main>
 </div>
 
@@ -161,7 +164,7 @@ const PH ={uhrzeit:"z. B. 06:00",stunden:"z. B. 6",tage:"z. B. Mo",datum:"z. B. 
 const CAP={uhrzeit:"Uhrzeit",stunden:"Stunden",tage:"Wochentag",datum:"Datum",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
-const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markants:false,chartTitle:"",data:[]};
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markants:false,chartTitle:"",layout:"full",data:[]};
 
 function exampleData(){
   const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
@@ -228,6 +231,14 @@ rowsEl.addEventListener("input",e=>{const i=+e.target.dataset.i,k=e.target.datas
   if(k==="time")state.data[i].time=e.target.value;
   else if(k==="value"){const n=parseFloat(e.target.value.replace(",",".")); state.data[i].value=isNaN(n)?null:n;}
   draw();});
+rowsEl.addEventListener("keydown",e=>{
+  if(e.key!=="Enter"||e.target.tagName!=="INPUT")return;
+  e.preventDefault();
+  const i=+e.target.dataset.i,k=e.target.dataset.k;
+  if(i===state.data.length-1){state.data.push({time:"",value:null});renderRows();draw();}
+  const next=rowsEl.querySelector('input[data-i="'+(i+1)+'"][data-k="'+k+'"]');
+  if(next){next.focus();next.select();}
+});
 rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);renderRows();draw();}});
 document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});renderRows();draw();};
 document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
@@ -239,8 +250,11 @@ xlabelInput.oninput=e=>{state.xlabel=e.target.value;draw();};
 document.getElementById("markants").onchange=e=>{state.markants=e.target.checked;draw();};
 document.getElementById("typeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   state.type=b.dataset.type;[...e.currentTarget.children].forEach(x=>x.classList.toggle("active",x===b));draw();});
+document.getElementById("layoutSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  state.layout=b.dataset.layout;[...e.currentTarget.children].forEach(x=>x.classList.toggle("active",x===b));draw();});
 
-const INK="#235C7A",INK_SOFT="#5E8298",GRID="rgba(35,92,122,.16)";
+const _css=getComputedStyle(document.documentElement),_cv=n=>_css.getPropertyValue(n).trim();
+const BG=_cv("--bg"),INK=_cv("--ink"),INK_SOFT=_cv("--ink-soft"),GRID=_cv("--grid"),ZEROLINE=_cv("--zeroline");
 const FONT='-apple-system,"Segoe UI",Roboto,sans-serif';
 function hexToRgba(hex,a){const n=parseInt(hex.slice(1),16);return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";}
 function niceStep(range,t){const raw=range/t,mag=Math.pow(10,Math.floor(Math.log10(raw))),norm=raw/mag;
@@ -274,10 +288,11 @@ function renderChart(ctx,W,H,c){
 
   let maxI=0,minI=0;pts.forEach((p,i)=>{if(p.value>pts[maxI].value)maxI=i;if(p.value<pts[minI].value)minI=i;});
 
-  /* Gitter + y-Achse */
-  ctx.strokeStyle=GRID;ctx.lineWidth=Math.max(1,c.lineW/3);ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;
-  ctx.textAlign="right";ctx.textBaseline="middle";
+  /* Gitter + y-Achse (Nulllinie kraeftiger) */
+  ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="right";ctx.textBaseline="middle";
   for(let v=vMin;v<=vMax+1e-9;v+=step){const yy=y(v);
+    const isZero=Math.abs(v)<step*1e-6;
+    ctx.strokeStyle=isZero?ZEROLINE:GRID;ctx.lineWidth=isZero?Math.max(1.5,c.lineW*0.5):Math.max(1,c.lineW/3);
     ctx.beginPath();ctx.moveTo(c.padL,yy);ctx.lineTo(W-c.padR,yy);ctx.stroke();
     ctx.fillText(formatNum(v),c.padL-c.axis*0.55,yy);}
   /* Einheit einmalig ueber der Plotflaeche */
@@ -331,44 +346,54 @@ function renderChart(ctx,W,H,c){
         ctx.beginPath();ctx.arc(px,py,c.markR,0,7);ctx.fillStyle=state.color;ctx.fill();
         ctx.lineWidth=Math.max(2,c.markR*0.4);ctx.strokeStyle="#FFF8EF";ctx.stroke();}
       const lbl=formatNum(pts[idx].value)+(state.unit?(" "+state.unit):"");
-      ctx.font="700 "+c.mark+"px "+FONT;ctx.fillStyle=INK;ctx.textAlign="center";
+      ctx.font="700 "+c.mark+"px "+FONT;ctx.fillStyle=INK;
+      const lhalf=ctx.measureText(lbl).width/2,lm=4;let lx=px;
+      if(px-lhalf<lm){ctx.textAlign="left";lx=lm;}
+      else if(px+lhalf>W-lm){ctx.textAlign="right";lx=W-lm;}
+      else ctx.textAlign="center";
       let above=(state.type==="bar")?true:isMax;
       if(above&&py-c.markGap-c.mark<top)above=false;
       if(!above&&py+c.markGap+c.mark>bottom)above=true;
-      if(above){ctx.textBaseline="alphabetic";ctx.fillText(lbl,px,py-c.markGap-c.markR);}
-      else{ctx.textBaseline="top";ctx.fillText(lbl,px,py+c.markGap+c.markR);}
+      if(above){ctx.textBaseline="alphabetic";ctx.fillText(lbl,lx,py-c.markGap-c.markR);}
+      else{ctx.textBaseline="top";ctx.fillText(lbl,lx,py+c.markGap+c.markR);}
     };
     drawMark(maxI,true);
     if(minI!==maxI)drawMark(minI,false);
   }
 }
 
-const PREVIEW   ={padL:92, padR:34,padT:70, padB:112,title:26,titleY:42,axis:20,tickGap:16,caption:22,captionGap:62, lineW:3,dot:4, mark:18,markR:5, markGap:13};
 const EXPORT_FULL={padL:140,padR:90,padT:120,padB:188,title:52,titleY:80,axis:36,tickGap:30,caption:40,captionGap:116,lineW:10,dot:9, mark:40,markR:12,markGap:26};
 const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:440}); /* ~20% (384px) rechts frei + Abstand */
+function layoutCfg(){return state.layout==="mod"?EXPORT_RIGHT:EXPORT_FULL;}
 
-/* Vorschau */
+/* Vorschau – echtes 16:9-Abbild des gewaehlten Export-Layouts (WYSIWYG) */
 const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
+const exportBtn=document.getElementById("exportBtn");
 function draw(){
-  const dpr=window.devicePixelRatio||1,box=canvas.parentElement.getBoundingClientRect();
-  canvas.width=box.width*dpr;canvas.height=box.height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,box.width,box.height);
-  renderChart(ctx,box.width,box.height,PREVIEW);
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=1920*dpr;canvas.height=1080*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,1920,1080);
+  ctx.fillStyle=BG;ctx.fillRect(0,0,1920,1080);
+  renderChart(ctx,1920,1080,layoutCfg());
+  exportBtn.disabled=!state.data.some(d=>d.value!=null&&isFinite(d.value));
 }
 
-/* Export */
+/* Export – aktuelles Layout als PNG; Dateiname nach Ueberschrift (sonst Datenreihe) */
 function slug(s){return ((s||"wettergrafik").trim().replace(/[^\wäöüÄÖÜß \-]/g,"").replace(/\s+/g,"_"))||"wettergrafik";}
-function doExport(cfg,suffix){
+function doExport(){
+  if(!state.data.some(d=>d.value!=null&&isFinite(d.value)))return;
+  const cfg=layoutCfg(),suffix=state.layout==="mod"?"_Mod-Grafik":"_Vollbild-Grafik";
+  const basis=state.chartTitle.trim()||state.name;
+  const now=new Date(),stamp=pad2(now.getDate())+pad2(now.getMonth()+1)+now.getFullYear();
   const ec=document.createElement("canvas");ec.width=1920;ec.height=1080;
   const ex=ec.getContext("2d");
-  ex.fillStyle="#FFF8EF";ex.fillRect(0,0,1920,1080);
+  ex.fillStyle=BG;ex.fillRect(0,0,1920,1080);
   renderChart(ex,1920,1080,cfg);
-  ec.toBlob(blob=>{const url=URL.createObjectURL(blob),a=document.createElement("a");
-    a.href=url;a.download=slug(state.name)+suffix+".png";
+  ec.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=stamp+"_"+slug(basis)+suffix+".png";
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},"image/png");
 }
-document.getElementById("exportFull").onclick=()=>doExport(EXPORT_FULL,"_vollbild_169");
-document.getElementById("exportRight").onclick=()=>doExport(EXPORT_RIGHT,"_safe-rechts_169");
+exportBtn.onclick=doExport;
 
 state.data=exampleData();renderRows();
 new ResizeObserver(draw).observe(canvas.parentElement);
