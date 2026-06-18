@@ -154,10 +154,11 @@ const PALETTE=[
   {name:"Gelb",hex:"#FEC804"},{name:"Anthrazit",hex:"#3D3E46"},{name:"Grau",hex:"#95989C"}
 ];
 const SERIES=[
-  {name:"Temperatur",unit:"°C"},{name:"Niederschlag",unit:"mm"},
-  {name:"Wind",unit:"km/h"},{name:"Windstärke",unit:"Bft"},
-  {name:"Luftfeuchte",unit:"%"},{name:"Bedeckung",unit:"%"},
-  {name:"Luftdruck",unit:"hPa"},{name:"Sonnenschein",unit:"h"},
+  /* decimals: feste Nachkommastellen fuer Extremwert-Labels; fehlt sie, wird aus dem Wert abgeleitet */
+  {name:"Temperatur",unit:"°C",decimals:1},{name:"Niederschlag",unit:"mm"},
+  {name:"Wind",unit:"km/h"},{name:"Windstärke",unit:"Bft",decimals:0},
+  {name:"Luftfeuchte",unit:"%",decimals:0},{name:"Bedeckung",unit:"%",decimals:0},
+  {name:"Luftdruck",unit:"hPa",decimals:0},{name:"Sonnenschein",unit:"h"},
   {name:"Schnee",unit:"cm"},{name:"UV-Index",unit:"UV"},
   {name:"__custom__",label:"Eigene …"}
 ];
@@ -246,7 +247,9 @@ document.getElementById("loadExample").onclick=()=>{state.data=exampleData();sta
   state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
   seriesSel.value="Temperatur";nameField.style.display="none";
   nameInput.value=state.name;unitInput.value=state.unit;renderRows();draw();};
-document.getElementById("clearAll").onclick=()=>{state.data=[];renderRows();draw();};
+document.getElementById("clearAll").onclick=()=>{
+  if(state.data.length&&!confirm("Alle Werte löschen?"))return;
+  state.data=[];renderRows();draw();};
 xlabelInput.oninput=e=>{state.xlabel=e.target.value;draw();};
 document.getElementById("markMax").onchange=e=>{state.markMax=e.target.checked;draw();};
 document.getElementById("markMin").onchange=e=>{state.markMin=e.target.checked;draw();};
@@ -262,8 +265,15 @@ function hexToRgba(hex,a){const n=parseInt(hex.slice(1),16);return "rgba("+((n>>
 function niceStep(range,t){const raw=range/t,mag=Math.pow(10,Math.floor(Math.log10(raw))),norm=raw/mag;
   let s;if(norm<1.5)s=1;else if(norm<3)s=2;else if(norm<7)s=5;else s=10;return s*mag;}
 function formatNum(v){const r=Math.round(v*100)/100;return (Number.isInteger(r)?r:r.toFixed(2)).toString().replace(".",",");}
-/* Extremwert-Labels: immer genau eine Nachkommastelle (z. B. 33,0 / 20,2) */
-function formatMark(v){return v.toFixed(1).replace(".",",");}
+/* Extremwert-Labels: Nachkommastellen je Datenreihe.
+   Temperatur fest 1 Stelle (33,0); hPa/%/Bft ganzzahlig; sonst aus dem Wert
+   abgeleitet (ganze Zahl ohne Komma, sonst eine Stelle). */
+function markDecimals(v){
+  const s=SERIES.find(x=>x.name===state.name);
+  if(s&&s.decimals!=null)return s.decimals;
+  return Number.isInteger(v)?0:1;
+}
+function formatMark(v){return v.toFixed(markDecimals(v)).replace(".",",");}
 
 /* ---- Gemeinsamer Renderer ---- */
 function renderChart(ctx,W,H,c){
@@ -271,8 +281,15 @@ function renderChart(ctx,W,H,c){
   /* Ueberschrift: eingetippter Text, sonst Serienname als Fallback */
   const titleText=state.chartTitle.trim()||state.name||"";
   if(titleText){
-    ctx.fillStyle=INK;ctx.font="700 "+c.title+"px "+FONT;ctx.textAlign="left";ctx.textBaseline="alphabetic";
-    ctx.fillText(titleText,c.padL+c.title,c.titleY);}
+    ctx.fillStyle=INK;ctx.textAlign="left";ctx.textBaseline="alphabetic";
+    const tx=c.padL+c.title,maxW=(W-c.padR)-tx; /* nur bis zum Plotrand: im Mod-Layout bleibt der Bereich rechts frei */
+    let ts=c.title;ctx.font="700 "+ts+"px "+FONT;
+    while(ts>c.title*0.5&&ctx.measureText(titleText).width>maxW){ts-=2;ctx.font="700 "+ts+"px "+FONT;}
+    let shown=titleText;
+    if(ctx.measureText(shown).width>maxW){ /* selbst kleinste Stufe zu lang -> mit Auslassungszeichen kuerzen */
+      while(shown.length>1&&ctx.measureText(shown+"…").width>maxW)shown=shown.slice(0,-1);
+      shown+="…";}
+    ctx.fillText(shown,tx,c.titleY);}
 
   if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
     ctx.fillText("Keine Daten - links Werte eingeben oder Beispiel laden.",W/2,H/2);return;}
@@ -383,6 +400,7 @@ function draw(){
   ctx.fillStyle=BG;ctx.fillRect(0,0,1920,1080);
   renderChart(ctx,1920,1080,layoutCfg());
   exportBtn.disabled=!state.data.some(d=>d.value!=null&&isFinite(d.value));
+  saveState();
 }
 
 /* Export – aktuelles Layout als PNG; Dateiname nach Ueberschrift (sonst Datenreihe) */
@@ -402,7 +420,32 @@ function doExport(){
 }
 exportBtn.onclick=doExport;
 
-state.data=exampleData();renderRows();
+/* ---- Persistenz: Stand automatisch im Browser sichern/wiederherstellen ---- */
+const STORE_KEY="wettergrafik:v1";
+function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
+function loadState(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return null;
+  const o=JSON.parse(raw);if(!o||!Array.isArray(o.data))return null;return o;}catch(e){return null;}}
+function setSegActive(id,attr,val){[...document.getElementById(id).children]
+  .forEach(b=>b.classList.toggle("active",b.dataset[attr]===val));}
+/* Nach dem Wiederherstellen alle Bedienelemente aus dem state nachziehen */
+function applyStateToUI(){
+  chartTitleInput.value=state.chartTitle||"";
+  if(SERIES.find(s=>s.name===state.name)){seriesSel.value=state.name;nameField.style.display="none";}
+  else{seriesSel.value="__custom__";nameField.style.display="";}
+  nameInput.value=state.name||"";chartTitleInput.placeholder=state.name||"";
+  unitInput.value=state.unit||"";
+  colorSel.value=state.color;updateSwatch();
+  xformatSel.value=state.xformat;xlabelInput.value=state.xlabel||"";
+  document.getElementById("markMax").checked=!!state.markMax;
+  document.getElementById("markMin").checked=!!state.markMin;
+  setSegActive("typeSeg","type",state.type);
+  setSegActive("layoutSeg","layout",state.layout);
+}
+
+const saved=loadState();
+if(saved){Object.assign(state,saved);applyStateToUI();}
+else{state.data=exampleData();}
+renderRows();
 new ResizeObserver(draw).observe(canvas.parentElement);
 draw();
 </script>
