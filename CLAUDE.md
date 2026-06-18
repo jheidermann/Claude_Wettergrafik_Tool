@@ -29,6 +29,26 @@ Einzelne HTML-Datei zur Visualisierung von Wetterdaten fürs Fernsehen
 - Farben zentral in `:root`; Canvas liest sie per `getComputedStyle`.
   Werte nur dort ändern, nicht im JS hartkodieren.
 
+## Design / Layout (Stand: 18.06.2026)
+Optik fürs Fernsehen, behutsam modernisiert. Nur Design angefasst, keine Logik.
+
+**PNG-Ausgabe** – Proportionen zentral in den Layout-Objekten `EXPORT_FULL`
+und `EXPORT_RIGHT` (im `<script>`):
+- Ränder TV-tauglich und ausbalanciert (u. a. rechter Rand 140 px, damit die
+  Kurve nicht am Bildrand klebt). Mod-Grafik hält rechts ~24 % frei
+  (`EXPORT_RIGHT.padR = 470`).
+- Schrift fürs TV vergrößert: Titel 58, Achsenzahlen 40, Achsentitel 44 px.
+- **Farbverlauf** unter der Linie (Datenfarbe `.32` oben → `.02` unten); die
+  Deckkraft oben ist die eine Stellschraube, falls zu kräftig/zart.
+- **Akzentbalken** unter dem Titel in der Datenfarbe.
+- Bewusst behutsam belassen: Gitter als Volllinie mit kräftiger Nulllinie,
+  x-Achse mit Tick-Strichen. (Moderne Alternativen – gepunktetes Gitter,
+  Petrol-Grundlinie, keine Ticks – wurden getestet, aber nicht übernommen.)
+
+**Editor-Oberfläche** – nur CSS: größere Eckenradien (10 px), mehr Luft,
+weicher Fokus-Ring, Hover-Zustände. Neuer Ton `--accent-strong` (`#1D4E68`)
+in `:root` für den Primär-Button-Hover.
+
 ## Bewusst NICHT umgesetzt / geparkt
 - Kein CSV-Import – Daten bleiben manuell (~24–30 Zeilen). Nicht vorschlagen.
 - Geparkt für später: zweite y-Achse, Wettersymbole, mehrere Datenreihen,
@@ -38,5 +58,7 @@ Einzelne HTML-Datei zur Visualisierung von Wetterdaten fürs Fernsehen
 - Nach jeder Änderung im Browser öffnen und prüfen (Graph erscheint, Export
   läuft), bevor committet wird.
 - Committen und pushen macht Jörg selbst (GitHub Desktop).
+- Browser-Vorschau über `.claude/launch.json` + `.claude/preview-server.js`
+  (kleiner Node-Static-Server, kein `python3`). Reines Dev-Tooling.
 - Vorsicht Versionsverwechslung: bei Wechsel zwischen Chat und Claude Code
   sicherstellen, dass beide auf demselben Repo-Stand aufsetzen.

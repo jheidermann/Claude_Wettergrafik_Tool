@@ -8,7 +8,7 @@
   :root{
     --bg:#FFF8EF;--ink:#235C7A;--ink-soft:#5E8298;--panel:#FFFFFF;
     --border:rgba(35,92,122,.22);--grid:rgba(35,92,122,.16);--field:#FFFFFF;
-    --danger:#C61E1E;--accent:#235C7A;--zeroline:rgba(35,92,122,.4);
+    --danger:#C61E1E;--accent:#235C7A;--accent-strong:#1D4E68;--zeroline:rgba(35,92,122,.4);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;}
@@ -16,44 +16,46 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     font-size:16px;line-height:1.4;}
   .wrap{display:grid;grid-template-columns:360px 1fr;height:100vh;}
-  .panel{background:var(--panel);border-right:1px solid var(--border);padding:24px 22px;overflow-y:auto;}
-  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 3px;}
-  h1{font-size:24px;font-weight:700;margin:0 0 22px;letter-spacing:.01em;}
-  .field{margin-bottom:16px;}
-  .field label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
+  .panel{background:var(--panel);border-right:1px solid var(--border);padding:28px 26px;overflow-y:auto;}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 4px;}
+  h1{font-size:24px;font-weight:700;margin:0 0 24px;letter-spacing:.01em;}
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:13px;font-weight:500;letter-spacing:.01em;color:var(--ink-soft);margin-bottom:7px;}
   input[type=text],input[type=number],select{width:100%;background:var(--field);border:1px solid var(--border);
-    color:var(--ink);border-radius:8px;padding:9px 11px;font-size:15px;font-family:inherit;}
-  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent;}
+    color:var(--ink);border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;
+    transition:border-color .12s ease,box-shadow .12s ease;}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(35,92,122,.14);}
   input::placeholder{color:#9fb2c4;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .seg{display:flex;background:var(--field);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-  .seg button{flex:1;background:none;border:none;color:var(--ink-soft);padding:9px 0;font-size:14px;font-family:inherit;cursor:pointer;}
+  .seg{display:flex;background:var(--field);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .seg button{flex:1;background:none;border:none;color:var(--ink-soft);padding:10px 0;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .12s ease,color .12s ease;}
   .seg button.active{background:rgba(35,92,122,.10);color:var(--ink);font-weight:600;}
   .color-pick{display:flex;align-items:center;gap:10px;}
-  .swatch{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);flex:none;}
+  .swatch{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);flex:none;}
   .check{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink);cursor:pointer;}
   .check input{width:auto;}
   .full{width:100%;}
-  .divider{height:1px;background:var(--border);margin:20px 0 16px;}
+  .divider{height:1px;background:var(--border);margin:22px 0 18px;}
   .tbl-head{display:grid;grid-template-columns:1fr 1fr 30px;gap:8px;font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 7px;}
   .data-row{display:grid;grid-template-columns:1fr 1fr 30px;gap:8px;margin-bottom:8px;align-items:center;}
   .data-row input{padding:7px 9px;font-size:14px;}
   .del{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:19px;line-height:1;padding:0;border-radius:5px;}
   .del:hover{color:var(--danger);}
-  .btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
-  .btn{background:var(--field);border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:9px 13px;font-size:14px;font-family:inherit;cursor:pointer;}
-  .btn:hover{border-color:var(--accent);}
+  .btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+  .btn{background:var(--field);border:1px solid var(--border);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:14px;font-family:inherit;cursor:pointer;transition:border-color .12s ease,background .12s ease;}
+  .btn:hover{border-color:var(--accent);background:rgba(35,92,122,.04);}
   .btn.primary{background:var(--accent);color:#FFF8EF;border-color:var(--accent);font-weight:600;}
+  .btn.primary:hover{background:var(--accent-strong);border-color:var(--accent-strong);}
   .stage{padding:24px;display:flex;flex-direction:column;min-width:0;}
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
   .toolbar .meta{font-size:13px;color:var(--ink-soft);}
   .toolbar .grp{display:flex;gap:8px;}
-  .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:14px;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px;}
-  canvas{aspect-ratio:16/9;max-width:100%;max-height:100%;border-radius:8px;}
+  .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:16px;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:14px;}
+  canvas{aspect-ratio:16/9;max-width:100%;max-height:100%;border-radius:10px;}
   .hint{font-size:13px;color:var(--ink-soft);margin-top:14px;}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
   .btn:disabled:hover{border-color:var(--border);}
-  #layoutSeg button{padding:9px 16px;}
+  #layoutSeg button{padding:10px 18px;}
   @media (max-width:760px){.wrap{grid-template-columns:1fr;height:auto;}
     .panel{border-right:none;border-bottom:1px solid var(--border);}.canvas-box{min-height:46vh;}}
 </style>
@@ -289,7 +291,10 @@ function renderChart(ctx,W,H,c){
     if(ctx.measureText(shown).width>maxW){ /* selbst kleinste Stufe zu lang -> mit Auslassungszeichen kuerzen */
       while(shown.length>1&&ctx.measureText(shown+"…").width>maxW)shown=shown.slice(0,-1);
       shown+="…";}
-    ctx.fillText(shown,tx,c.titleY);}
+    ctx.fillText(shown,tx,c.titleY);
+    /* modern: Akzentbalken unter dem Titel in der Datenfarbe */
+    const _bw=Math.min(ctx.measureText(shown).width,maxW),_bh=Math.max(4,Math.round(ts*0.10));
+    ctx.fillStyle=state.color;ctx.fillRect(tx,c.titleY+Math.round(ts*0.30),_bw,_bh);}
 
   if(pts.length===0){ctx.fillStyle=INK_SOFT;ctx.font=c.axis+"px "+FONT;ctx.textAlign="center";
     ctx.fillText("Keine Daten - links Werte eingeben oder Beispiel laden.",W/2,H/2);return;}
@@ -354,7 +359,9 @@ function renderChart(ctx,W,H,c){
   }else{
     ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(X(i),y(p.value)):ctx.moveTo(X(i),y(p.value)));
     ctx.lineTo(X(n-1),bottom);ctx.lineTo(X(0),bottom);ctx.closePath();
-    ctx.fillStyle=hexToRgba(state.color,.12);ctx.fill();
+    const _grad=ctx.createLinearGradient(0,c.padT,0,bottom);
+    _grad.addColorStop(0,hexToRgba(state.color,.32));_grad.addColorStop(1,hexToRgba(state.color,.02));
+    ctx.fillStyle=_grad;ctx.fill();
     ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(X(i),y(p.value)):ctx.moveTo(X(i),y(p.value)));
     ctx.strokeStyle=state.color;ctx.lineWidth=c.lineW;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
   }
@@ -386,8 +393,8 @@ function renderChart(ctx,W,H,c){
   }
 }
 
-const EXPORT_FULL={padL:140,padR:90,padT:120,padB:188,title:52,titleY:80,axis:36,tickGap:30,caption:40,captionGap:116,lineW:10,dot:9, mark:40,markR:12,markGap:26};
-const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:440}); /* ~20% (384px) rechts frei + Abstand */
+const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,tickGap:30,caption:44,captionGap:124,lineW:10,dot:9, mark:42,markR:13,markGap:28};
+const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:470}); /* ~24% rechts frei für Moderation + Abstand */
 function layoutCfg(){return state.layout==="mod"?EXPORT_RIGHT:EXPORT_FULL;}
 
 /* Vorschau – echtes 16:9-Abbild des gewaehlten Export-Layouts (WYSIWYG) */
