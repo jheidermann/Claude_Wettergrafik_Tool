@@ -4,6 +4,13 @@
 Einzelne HTML-Datei zur Visualisierung von Wetterdaten fürs Fernsehen
 (Zeitreihen als Linie oder Balken). Hauptdatei: `wettergrafik.html`.
 
+## Verhalten
+- **Autospeichern (kein Bug, beabsichtigt):** Der komplette Arbeitsstand
+  (Werte, Überschrift, Reihe, Einheit, Farbe, Typ, x-Format,
+  Achsenbeschriftung, Höchst-/Tiefstwert, Layout) wird automatisch im Browser
+  gespeichert (`localStorage`, Key `wettergrafik:v1`) und beim Öffnen
+  wiederhergestellt. Ohne gespeicherten Stand startet das Beispiel.
+
 ## Harte Regeln (nicht verletzen)
 - **Eine HTML-Datei, Canvas pur.** Muss offline laufen: keine Bibliothek,
   kein CDN, kein Framework, kein Build. Doppelklick öffnet sie im Browser.
