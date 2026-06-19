@@ -138,11 +138,12 @@
       <div class="seg" id="layoutSeg">
         <button data-layout="full" class="active">Vollbild-Grafik</button>
         <button data-layout="mod">Mod-Grafik</button>
+        <button data-layout="quad">App (1:1)</button>
       </div>
       <button class="btn primary" id="exportBtn">⤓ PNG exportieren</button>
     </div>
     <div class="canvas-box"><canvas id="chart"></canvas></div>
-    <p class="hint">Vorschau zeigt das gewählte Layout in echtem 16:9. „Mod-Grafik" hält rechts Platz für Moderator*innen frei. Export gibt genau diese Ansicht als PNG aus (1920 × 1080). Offline lauffähig.</p>
+    <p class="hint">Vorschau zeigt das gewählte Layout maßstabsgetreu. „Mod-Grafik" hält rechts Platz für Moderator*innen frei, „App (1:1)" liefert das Quadratformat für die MDR-App. Export gibt genau diese Ansicht als PNG aus (16:9 = 1920 × 1080, App = 1080 × 1080). Offline lauffähig.</p>
   </main>
 </div>
 
@@ -168,7 +169,7 @@ const PH ={uhrzeit:"z. B. 06:00",stunden:"z. B. 6",tage:"z. B. Mo",datum:"z. B. 
 const CAP={uhrzeit:"Uhrzeit",stunden:"Stunden",tage:"Wochentag",datum:"Datum",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
-const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,chartTitle:"",layout:"full",data:[]};
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",layout:"full",data:[]};
 
 function exampleData(){
   const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
@@ -246,6 +247,7 @@ rowsEl.addEventListener("keydown",e=>{
 rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);renderRows();draw();}});
 document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});renderRows();draw();};
 document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
+  state.markMaxPos=null;state.markMinPos=null;
   state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
   seriesSel.value="Temperatur";nameField.style.display="none";
   nameInput.value=state.name;unitInput.value=state.unit;renderRows();draw();};
@@ -278,7 +280,7 @@ function markDecimals(v){
 function formatMark(v){return v.toFixed(markDecimals(v)).replace(".",",");}
 
 /* ---- Gemeinsamer Renderer ---- */
-function renderChart(ctx,W,H,c){
+function renderChart(ctx,W,H,c,boxes){
   const pts=state.data.filter(d=>d.value!=null&&isFinite(d.value));
   /* Ueberschrift: eingetippter Text, sonst Serienname als Fallback */
   const titleText=state.chartTitle.trim()||state.name||"";
@@ -307,8 +309,18 @@ function renderChart(ctx,W,H,c){
   if(state.type==="bar"||vMin>=0)vMin=Math.min(0,vMin);
   if(vMin===vMax){vMin-=1;vMax+=1;}
   const step=niceStep(vMax-vMin,5);
-  vMin=Math.floor(vMin/step)*step;vMax=Math.ceil(vMax/step)*step;
-  if(state.markMax)vMax+=step; /* Kopffreiheit fuer die Wertbeschriftung des Hoechstwerts */
+  vMin=Math.floor(vMin/step)*step;
+  /* Obergrenze: genau so viel Kopffreiheit, dass das Hoechstwert-Label IMMER ueber dem
+     Punkt Platz hat – und nicht mehr. Die benoetigte Label-Hoehe (in Pixeln: Luecke +
+     Schrift + Punktradius) wird ueber die Plotflaeche in einen Datenwert umgerechnet.
+     Die oberste beschriftete Gitterlinie bleibt die naechste glatte step-Stufe ueber dem
+     Hoechstwert (bei Temperatur = 5er); der Plotrand liegt nur knapp darueber, sodass das
+     Label im schmalen Raum darueber sitzt. Bewusst label-schalter-unabhaengig, damit die
+     y-Achse beim Ein-/Ausblenden der Extremwerte nicht springt. */
+  const rawMax=vMax;
+  const topGrid=Math.ceil(rawMax/step)*step;        /* oberste beschriftete Linie */
+  const headFrac=(c.markGap+c.mark+c.markR)/plotH;  /* Label-Hoehe als Anteil der Plotflaeche */
+  vMax=Math.max(topGrid, vMin+(rawMax-vMin)/(1-headFrac));
   const X=i=> state.type==="bar" ? x0+band*(i+0.5) : x0+(n===1?innerW/2:innerW*i/(n-1));
   const y=v=>c.padT+plotH*(1-(v-vMin)/(vMax-vMin));
 
@@ -376,15 +388,20 @@ function renderChart(ctx,W,H,c){
         ctx.lineWidth=Math.max(2,c.markR*0.4);ctx.strokeStyle="#FFF8EF";ctx.stroke();}
       const lbl=formatMark(pts[idx].value)+(state.unit?(" "+state.unit):"");
       ctx.font="700 "+c.mark+"px "+FONT;ctx.fillStyle=INK;
-      const lhalf=ctx.measureText(lbl).width/2,lm=4;let lx=px;
-      if(px-lhalf<lm){ctx.textAlign="left";lx=lm;}
-      else if(px+lhalf>W-lm){ctx.textAlign="right";lx=W-lm;}
-      else ctx.textAlign="center";
+      /* manuelle Position (Drag & Drop), gespeichert als Bruchteil von W/H; null = zentriert */
+      const off=isMax?state.markMaxPos:state.markMinPos;
       let above=(state.type==="bar")?true:isMax;
-      if(above&&py-c.markGap-c.mark<top)above=false;
-      if(!above&&py+c.markGap+c.mark>bottom)above=true;
-      if(above){ctx.textBaseline="alphabetic";ctx.fillText(lbl,lx,py-c.markGap-c.markR);}
-      else{ctx.textBaseline="top";ctx.fillText(lbl,lx,py+c.markGap+c.markR);}
+      if(!off){ /* nur ohne manuelle Position: Auto-Flip, wenn an der Standardseite kein Platz ist */
+        if(above&&py-c.markGap-c.mark<top)above=false;
+        if(!above&&py+c.markGap+c.mark>bottom)above=true;}
+      let lx=px,ly=above?(py-c.markGap-c.markR):(py+c.markGap+c.markR);
+      const baseline=above?"alphabetic":"top";
+      if(off){lx+=off.x*W;ly+=off.y*H;} /* gezogenen Versatz anwenden */
+      ctx.textAlign="center";ctx.textBaseline=baseline;ctx.fillText(lbl,lx,ly);
+      if(boxes){ /* Bounding-Box (Canvas-Koord) fuer den Drag-Hit-Test – nur in der Vorschau gesetzt */
+        const wd=ctx.measureText(lbl).width,pad=Math.round(c.mark*0.35),
+              by=(baseline==="alphabetic")?ly-c.mark:ly;
+        boxes[isMax?"max":"min"]={x:lx-wd/2-pad,y:by-pad,w:wd+2*pad,h:c.mark+2*pad};}
     };
     const showMax=state.markMax;
     const showMin=state.markMin&&!(minI===maxI&&state.markMax);
@@ -393,34 +410,73 @@ function renderChart(ctx,W,H,c){
   }
 }
 
-const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,tickGap:30,caption:44,captionGap:124,lineW:10,dot:9, mark:42,markR:13,markGap:28};
+const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,tickGap:30,caption:44,captionGap:124,lineW:10,dot:9, mark:42,markR:13,markGap:14};
 const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:470}); /* ~24% rechts frei für Moderation + Abstand */
-function layoutCfg(){return state.layout==="mod"?EXPORT_RIGHT:EXPORT_FULL;}
+/* App-Quadrat 1080×1080 (MDR-App): eigene Proportionen statt von FULL abgeleitet –
+   schmaler, dafuer relativ mehr vertikaler Raum fuer den Graphen; Schrift fuer
+   kleine Screens bewusst groß gehalten (auf dem Handy gut lesbar). */
+const EXPORT_SQUARE={padL:120,padR:80,padT:152,padB:172,title:52,titleY:90,axis:38,tickGap:30,caption:42,captionGap:126,lineW:9,dot:8,mark:40,markR:12,markGap:12};
+function layoutCfg(){return state.layout==="mod"?EXPORT_RIGHT:(state.layout==="quad"?EXPORT_SQUARE:EXPORT_FULL);}
+/* Export-/Vorschaumaße je Layout: Quadrat fuer die App, sonst 16:9 */
+function exportDims(){return state.layout==="quad"?{w:1080,h:1080}:{w:1920,h:1080};}
 
 /* Vorschau – echtes 16:9-Abbild des gewaehlten Export-Layouts (WYSIWYG) */
 const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
 const exportBtn=document.getElementById("exportBtn");
+const MARK_BOXES={max:null,min:null}; /* Label-Bounding-Boxen (Canvas-Koord) fuer den Drag-Hit-Test */
+let markDrag=null;                    /* aktiver Drag {key,sx,sy,ox,oy} oder null */
 function draw(){
+  const {w,h}=exportDims();
   const dpr=window.devicePixelRatio||1;
-  canvas.width=1920*dpr;canvas.height=1080*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,1920,1080);
-  ctx.fillStyle=BG;ctx.fillRect(0,0,1920,1080);
-  renderChart(ctx,1920,1080,layoutCfg());
+  canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  canvas.style.aspectRatio=w+" / "+h; /* Vorschau-Seitenverhaeltnis folgt dem Layout (WYSIWYG) */
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle=BG;ctx.fillRect(0,0,w,h);
+  MARK_BOXES.max=MARK_BOXES.min=null;
+  renderChart(ctx,w,h,layoutCfg(),MARK_BOXES);
   exportBtn.disabled=!state.data.some(d=>d.value!=null&&isFinite(d.value));
   saveState();
 }
+
+/* ---- Drag & Drop der Extremwert-Labels ---- */
+function markAt(e){ /* Maus-/Touchpunkt -> getroffenes Label ('max'/'min') + Canvas-Koordinaten, sonst null */
+  const r=canvas.getBoundingClientRect(),{w,h}=exportDims();
+  const x=(e.clientX-r.left)/r.width*w,y=(e.clientY-r.top)/r.height*h;
+  for(const k of ["max","min"]){const b=MARK_BOXES[k];
+    if(b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)return {key:k,x,y};}
+  return null;}
+canvas.addEventListener("pointerdown",e=>{
+  const hit=markAt(e);if(!hit)return;
+  const cur=(hit.key==="max"?state.markMaxPos:state.markMinPos)||{x:0,y:0};
+  markDrag={key:hit.key,sx:hit.x,sy:hit.y,ox:cur.x,oy:cur.y};
+  try{canvas.setPointerCapture(e.pointerId);}catch(_){}
+  canvas.style.cursor="grabbing";e.preventDefault();});
+canvas.addEventListener("pointermove",e=>{
+  if(markDrag){const r=canvas.getBoundingClientRect(),{w,h}=exportDims();
+    const x=(e.clientX-r.left)/r.width*w,y=(e.clientY-r.top)/r.height*h;
+    const np={x:markDrag.ox+(x-markDrag.sx)/w,y:markDrag.oy+(y-markDrag.sy)/h};
+    if(markDrag.key==="max")state.markMaxPos=np;else state.markMinPos=np;draw();return;}
+  canvas.style.cursor=markAt(e)?"grab":"default";});
+function endMarkDrag(){if(markDrag){markDrag=null;canvas.style.cursor="grab";saveState();}}
+canvas.addEventListener("pointerup",endMarkDrag);
+canvas.addEventListener("pointercancel",endMarkDrag);
+canvas.addEventListener("dblclick",e=>{ /* Doppelklick auf ein Label -> zurueck auf zentriert */
+  const hit=markAt(e);if(!hit)return;
+  if(hit.key==="max")state.markMaxPos=null;else state.markMinPos=null;draw();});
 
 /* Export – aktuelles Layout als PNG; Dateiname nach Ueberschrift (sonst Datenreihe) */
 function slug(s){return ((s||"wettergrafik").trim().replace(/[^\wäöüÄÖÜß \-]/g,"").replace(/\s+/g,"_"))||"wettergrafik";}
 function doExport(){
   if(!state.data.some(d=>d.value!=null&&isFinite(d.value)))return;
-  const cfg=layoutCfg(),suffix=state.layout==="mod"?"_Mod-Grafik":"_Vollbild-Grafik";
+  const cfg=layoutCfg();
+  const suffix=state.layout==="mod"?"_Mod-Grafik":(state.layout==="quad"?"_App-Grafik":"_Vollbild-Grafik");
+  const {w,h}=exportDims();
   const basis=state.chartTitle.trim()||state.name;
   const now=new Date(),stamp=pad2(now.getDate())+pad2(now.getMonth()+1)+now.getFullYear();
-  const ec=document.createElement("canvas");ec.width=1920;ec.height=1080;
+  const ec=document.createElement("canvas");ec.width=w;ec.height=h;
   const ex=ec.getContext("2d");
-  ex.fillStyle=BG;ex.fillRect(0,0,1920,1080);
-  renderChart(ex,1920,1080,cfg);
+  ex.fillStyle=BG;ex.fillRect(0,0,w,h);
+  renderChart(ex,w,h,cfg);
   ec.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement("a");
     a.href=url;a.download=stamp+"_"+slug(basis)+suffix+".png";
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},"image/png");
