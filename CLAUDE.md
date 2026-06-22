@@ -29,7 +29,7 @@ Einzelne HTML-Datei zur Visualisierung von Wetterdaten fürs Fernsehen
 - Farben zentral in `:root`; Canvas liest sie per `getComputedStyle`.
   Werte nur dort ändern, nicht im JS hartkodieren.
 
-## Design / Layout (Stand: 20.06.2026)
+## Design / Layout (Stand: 23.06.2026)
 Optik fürs Fernsehen, behutsam modernisiert. (Achsen- und Label-Logik separat im
 nächsten Abschnitt.)
 
@@ -55,6 +55,22 @@ Achsentitel 42 px). Sonst gleiches Design wie 16:9 (Farben, Farbverlauf,
 Akzentbalken, Extremwert-Marken). Export-Suffix `_App-Grafik`. Vorschau bleibt
 WYSIWYG: Canvas-Seitenverhältnis folgt dem Layout (`draw()` über `exportDims()`).
 Die 16:9-Exporte (Vollbild + Mod-Grafik, 1920×1080) sind unverändert.
+
+**Mod-Grafik – Trennlinie oben (Stand: 23.06.2026)** – Dünne Petrol-Trennlinie
+(`#235C7A` aus `:root`) am oberen Rand, **nur in der Mod-Variante** (Flag
+`topRule:true` in `EXPORT_RIGHT`). Grund: Auf Sendung sitzt direkt über der Grafik
+die helle Chyron-Überschrift (z. B. „Sommertag und Co", kommt vom Chyron-System,
+nicht aus dem Tool) – ohne Linie liefe die helle Grafik randlos in die helle
+Überschrift. **2D-Verlauf:** oben voll → nach unten transparent UND links voll →
+rechts knapp vor der Moderationsfläche ausgelaufen. Umsetzung als Erstes in
+`renderChart` über ein **Offscreen-Canvas** (vertikaler Verlauf zeichnen, dann
+horizontaler Verlauf per `destination-in` als Maske – bewusst Offscreen, sonst
+würde die Maske den ganzen Haupt-Canvas mitlöschen). **Zwei Stellschrauben** im
+Layout-Objekt `EXPORT_RIGHT`: `topRuleH` (Bandhöhe, 11 px) und `topRuleA`
+(Deckkraft oben, 0,5 = dezent). Die horizontale Auslauf-Position steckt in den
+Gradient-Stops in `renderChart` (~0,72–0,78 der Breite, knapp vor `padR`).
+**Vollbild und App 1:1 bewusst ohne Linie** (kein Flag) – bei Bedarf später per
+`topRule` nachrüstbar.
 
 **Editor-Oberfläche** – nur CSS: größere Eckenradien (10 px), mehr Luft,
 weicher Fokus-Ring, Hover-Zustände. Neuer Ton `--accent-strong` (`#1D4E68`)

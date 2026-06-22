@@ -349,6 +349,26 @@ function formatMark(v){return v.toFixed(markDecimals(v)).replace(".",",");}
 
 /* ---- Gemeinsamer Renderer ---- */
 function renderChart(ctx,W,H,c,boxes){
+  /* Mod-Variante: dünne Petrol-Trennlinie am oberen Rand, damit die helle Grafik
+     nicht randlos in die (ebenfalls helle) Chyron-Überschrift läuft. Verlauf 2D:
+     oben voll → nach unten transparent UND links voll → rechts (vor der
+     Moderationsfläche) ausgelaufen. Auf ein Offscreen-Canvas gezeichnet, damit der
+     horizontale Verlauf (per destination-in als Maske) nur das Band beschneidet,
+     nicht den ganzen Canvas. Stellschrauben: c.topRuleA (Deckkraft), c.topRuleH (Höhe). */
+  if(c.topRule){
+    const bh=c.topRuleH,oc=document.createElement("canvas");oc.width=W;oc.height=bh;
+    const o=oc.getContext("2d");
+    const gv=o.createLinearGradient(0,0,0,bh);
+    gv.addColorStop(0,hexToRgba(INK,c.topRuleA));gv.addColorStop(1,hexToRgba(INK,0));
+    o.fillStyle=gv;o.fillRect(0,0,W,bh);
+    o.globalCompositeOperation="destination-in";
+    const gh=o.createLinearGradient(0,0,W,0);
+    gh.addColorStop(0,"rgba(255,255,255,0)");gh.addColorStop(.03,"rgba(255,255,255,1)");
+    gh.addColorStop(.52,"rgba(255,255,255,1)");gh.addColorStop(.72,"rgba(255,255,255,.25)");
+    gh.addColorStop(.78,"rgba(255,255,255,0)");
+    o.fillStyle=gh;o.fillRect(0,0,W,bh);
+    ctx.drawImage(oc,0,0);
+  }
   const pts=state.data.filter(d=>d.value!=null&&isFinite(d.value));
   /* Ueberschrift: eingetippter Text, sonst Serienname als Fallback */
   const titleText=state.chartTitle.trim()||state.name||"";
@@ -479,7 +499,7 @@ function renderChart(ctx,W,H,c,boxes){
 }
 
 const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,tickGap:30,caption:44,captionGap:124,lineW:10,dot:9, mark:42,markR:13,markGap:14};
-const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:470}); /* ~24% rechts frei für Moderation + Abstand */
+const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:470,topRule:true,topRuleH:11,topRuleA:0.5}); /* ~24% rechts frei für Moderation + Abstand; topRule = dünne Petrol-Trennlinie am oberen Rand. topRuleH = Bandhöhe, topRuleA = Deckkraft oben (die beiden Stellschrauben). */
 /* App-Quadrat 1080×1080 (MDR-App): eigene Proportionen statt von FULL abgeleitet –
    schmaler, dafuer relativ mehr vertikaler Raum fuer den Graphen; Schrift fuer
    kleine Screens bewusst groß gehalten (auf dem Handy gut lesbar). */
