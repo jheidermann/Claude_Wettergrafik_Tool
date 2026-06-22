@@ -85,6 +85,57 @@ Breite/Höhe in `state.markMaxPos` / `state.markMinPos` → layoutübergreifend,
 solange ein Label nicht manuell positioniert ist. Bewusst **kein** Bildrand-
 Anschlag und **keine** Verbindungslinie zum Punkt (beides bei Bedarf nachrüstbar).
 
+## x-Achsen-Auto-Befüllung (Logik, Stand: 22.06.2026)
+
+**Prinzip.** Die Zeitspalte (x-Achse) füllt sich aus dem **Inhalt des ersten
+Feldes** – nicht aus einem festen Startwert. Zentrale Funktion `fillTimesData()`
+schreibt die Felder **2…n**; `fillFrom(fmt,first)` liefert die Sequenzfunktion
+`i=>Label` **oder `null`**. Erstes Feld leer/ungültig → `null` → **gar nicht
+befüllen** (kein hartes 00:00 / Mo / heute). **Feld 1 bleibt beim Tippen/Blur
+immer unangetastet** – da bist nur du die Quelle. Schrittweite immer +1 Einheit.
+
+**Auslöser.** `focusout`/Enter des **ersten** Zeit-Felds (bewusst **nicht**
+`oninput`). Erneutes Ändern von Feld 1 überschreibt 2…n komplett neu – auch
+manuell korrigierte.
+
+**Fortsetzung je Format.**
+- **Uhrzeit:** +1 h, modulo 24 (`23:00`→`00:00`), Anzeige zweistellig `HH:00`.
+- **Wochentage:** zyklisch So→Mo, in der **eingegebenen Schreibweise** – kurz
+  (`Mo`) oder lang (`Montag`) erkannt, Groß-/Kleinschreibung des ersten Feldes
+  gespiegelt (`caseStyler`, `WD`/`WD_LONG`).
+- **Datum:** +1 Tag mit echter Kalenderlogik (Monatslängen, Schaltjahr) per
+  **reiner Zahlen-Arithmetik** (`addDays`/`daysInMonth`/`isLeap`) – bewusst
+  **kein** `Date.setDate`/UTC (vermeidet Zeitzonen-Verschiebung). Eingabeformat
+  gespiegelt: mit/ohne Jahr, 2- oder 4-stellig (`parseDateParts`/`fmtDateParts`).
+- **Eigene:** keine Automatik.
+
+**Formatwechsel.** Wechsel im Dropdown setzt das **erste Feld auf „heute/jetzt"**
+im neuen Format (`defaultFirst`: aktuelle Stunde / heutiger Wochentag / heutiges
+Datum), dann Spalte neu befüllen. Grund: der alte Wert im alten Format wäre
+sinnlos (sonst bliebe z. B. `06:00` bei Wechsel auf Wochentag stehen). Das ist
+**bewusst anderes** Verhalten als beim Tippen/Blur (dort bleibt Feld 1 stehen) –
+zwei Auslöser, zwei gewollte Verhalten.
+
+**Feldanzahl ändern.** `+ Zeile`/Löschen/Enter ergänzen bzw. kürzen am Ende und
+setzen die Sequenz über **dieselbe** `fillTimesData()` fort.
+
+**Button „Zeitspalte nach Format füllen"** = manuelles „neu füllen" (gleiche
+Funktion, respektiert ebenfalls leeres/ungültiges Feld 1 → keine Befüllung).
+
+**Beim Laden wird NICHT automatisch gefüllt** – sonst würden manuell korrigierte
+Labels bei jedem Öffnen überschrieben. Ein (alt)inkonsistenter `localStorage`-Stand
+(Format X, Spalte aber im alten Format) korrigiert sich erst beim nächsten
+Formatwechsel oder Feld-1-Blur. Kein Bug.
+
+**Format „Stunden" entfernt** (aus dem Dropdown). Alte gespeicherte Stände mit
+`xformat:"stunden"` migrieren beim Laden zu `"eigene"` (Labels bleiben erhalten).
+
+**Kein Re-Render-Loop.** Die Auto-Befüllung zieht nur die DOM-Werte der Zeitspalte
+nach (`syncTimeInputs`, setzt `input.value` → feuert **keine** Events) und ruft
+`draw()`; ein `rebuilding`-Guard fängt das durch `renderRows()` (via
+`innerHTML=""`) ausgelöste `focusout` ab, sodass die Befüllung sich nicht selbst
+neu triggert.
+
 ## Bewusst NICHT umgesetzt / geparkt
 - Kein CSV-Import – Daten bleiben manuell (~24–30 Zeilen). Nicht vorschlagen.
 - Geparkt für später: zweite y-Achse, Wettersymbole, mehrere Datenreihen,

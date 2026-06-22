@@ -104,7 +104,6 @@
       <label for="xformat">x-Achse: Format</label>
       <select id="xformat">
         <option value="uhrzeit">Uhrzeit (00:00)</option>
-        <option value="stunden">Stunden (0, 1, 2 …)</option>
         <option value="tage">Wochentage (Mo, Di …)</option>
         <option value="datum">Datum (TT.MM.)</option>
         <option value="eigene">Eigene</option>
@@ -165,8 +164,8 @@ const SERIES=[
   {name:"Schnee",unit:"cm"},{name:"UV-Index",unit:"UV"},
   {name:"__custom__",label:"Eigene …"}
 ];
-const PH ={uhrzeit:"z. B. 06:00",stunden:"z. B. 6",tage:"z. B. Mo",datum:"z. B. 14.06.",eigene:"Label"};
-const CAP={uhrzeit:"Uhrzeit",stunden:"Stunden",tage:"Wochentag",datum:"Datum",eigene:""};
+const PH ={uhrzeit:"z. B. 06:00",tage:"z. B. Mo",datum:"z. B. 14.06.",eigene:"Label"};
+const CAP={uhrzeit:"Uhrzeit",tage:"Wochentag",datum:"Datum",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
 const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",layout:"full",data:[]};
@@ -176,17 +175,76 @@ function exampleData(){
   return v.map((value,i)=>({time:String(i).padStart(2,"0")+":00",value}));
 }
 function pad2(n){return String(n).padStart(2,"0");}
-function fmtDate(d){return pad2(d.getDate())+"."+pad2(d.getMonth()+1)+".";}
-function parseDate(s){const m=String(s).match(/^\s*(\d{1,2})\.(\d{1,2})\.?\s*(\d{2,4})?/);if(!m)return null;
-  let yr=m[3]?+m[3]:new Date().getFullYear();if(yr<100)yr+=2000;const d=new Date(yr,+m[2]-1,+m[1]);
-  if(isNaN(d.getTime()))return null;d.setHours(0,0,0,0);return d;}
-/* Liefert eine Sequenzfunktion i=>Label, die beim Inhalt des ersten Feldes beginnt */
+
+/* ---- Datum: reine Zahlen-Arithmetik fuer die Tag-Logik (kein Date-Objekt mit
+   setDate/getDate, damit keine Zeitzonen-/UTC-Verschiebung auftritt). ---- */
+function isLeap(y){return (y%4===0&&y%100!==0)||y%400===0;}
+function daysInMonth(y,m){return m===2?(isLeap(y)?29:28):((m===4||m===6||m===9||m===11)?30:31);}
+/* Erstes Feld -> {day,month,year,yearStr} oder null bei leer/ungueltig.
+   yearStr merkt, ob (und wie breit) ein Jahr eingegeben wurde -> Eingabeformat spiegeln. */
+function parseDateParts(s){
+  const m=String(s).match(/^\s*(\d{1,2})\.(\d{1,2})\.?(?:\s*(\d{2,4}))?/);
+  if(!m)return null;
+  const day=+m[1],month=+m[2];if(month<1||month>12)return null;
+  const yearStr=m[3]||null;let year;
+  if(yearStr){year=+yearStr;if(year<100)year+=2000;}
+  else year=new Date().getFullYear(); /* nur Bezugsjahr fuer Monatslaenge/Schaltjahr, wird nicht angezeigt */
+  if(day<1||day>daysInMonth(year,month))return null;
+  return {day,month,year,yearStr};
+}
+function addDays(p,i){let day=p.day,month=p.month,year=p.year;
+  for(let k=0;k<i;k++){day++;if(day>daysInMonth(year,month)){day=1;if(++month>12){month=1;year++;}}}
+  return {day,month,year,yearStr:p.yearStr};}
+function fmtDateParts(p){let s=pad2(p.day)+"."+pad2(p.month)+".";
+  if(p.yearStr)s+=(p.yearStr.length<=2?pad2(p.year%100):String(p.year));return s;}
+
+/* ---- Wochentage in der eingegebenen Schreibweise: kurz (Mo) oder lang (Montag)
+   erkennen, Gross-/Kleinschreibung des ersten Feldes spiegeln, zyklisch (So->Mo). ---- */
+const WD_LONG=["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+function caseStyler(sample){ /* So->Mo in der Schreibweise des ersten Feldes */
+  if(sample!==sample.toLowerCase()&&sample===sample.toUpperCase())return s=>s.toUpperCase();
+  if(sample===sample.toLowerCase())return s=>s.toLowerCase();
+  return s=>s;}
+function weekdaySeq(first){
+  const raw=String(first).trim();if(!raw)return null;
+  const low=raw.toLowerCase();
+  let idx=WD.findIndex(d=>d.toLowerCase()===low),long=false;
+  if(idx<0){idx=WD_LONG.findIndex(d=>d.toLowerCase()===low);long=idx>=0;}
+  if(idx<0)return null;
+  const base=long?WD_LONG:WD,style=caseStyler(raw);
+  return i=>style(base[(idx+i)%7]);}
+
+/* Liefert eine Sequenzfunktion i=>Label ab dem Inhalt des ersten Feldes – oder
+   null, wenn das erste Feld leer/ungueltig ist (dann NICHT befuellen, kein hartes
+   00:00 / Mo / heute). Schrittweite immer +1 Einheit. */
 function fillFrom(fmt,first){
-  if(fmt==="stunden"){let s=parseInt(first,10);if(isNaN(s))s=0;return i=>String(s+i);}
-  if(fmt==="uhrzeit"){let h=0;const m=String(first).match(/^\s*(\d{1,2})/);if(m)h=parseInt(m[1],10)%24;return i=>pad2((h+i)%24)+":00";}
-  if(fmt==="tage"){let idx=WD.findIndex(d=>d.toLowerCase()===String(first).trim().toLowerCase());if(idx<0)idx=0;return i=>WD[(idx+i)%7];}
-  if(fmt==="datum"){let b=parseDate(first);if(!b){b=new Date();b.setHours(0,0,0,0);}return i=>{const d=new Date(b);d.setDate(b.getDate()+i);return fmtDate(d);};}
-  return ()=>"";
+  const f=String(first==null?"":first).trim();
+  if(!f)return null;
+  if(fmt==="uhrzeit"){const m=f.match(/^(\d{1,2})/);if(!m)return null;const h=(+m[1])%24;return i=>pad2((h+i)%24)+":00";}
+  if(fmt==="tage")return weekdaySeq(f);
+  if(fmt==="datum"){const p=parseDateParts(f);if(!p)return null;return i=>fmtDateParts(addDays(p,i));}
+  return null;
+}
+
+/* Fuellt die Zeit-Spalte ab Feld 2 (Index 1) neu aus dem ersten Feld.
+   Aendert nur state.data; gibt true zurueck, wenn befuellt wurde. Erstbefuellung
+   UND Fortsetzung (Format-/Anzahl-Aenderung, Button) laufen alle hierueber. */
+function fillTimesData(){
+  if(state.xformat==="eigene"||!state.data.length)return false;
+  const seq=fillFrom(state.xformat,state.data[0].time);
+  if(!seq)return false;
+  for(let i=1;i<state.data.length;i++)state.data[i].time=seq(i);
+  return true;
+}
+/* Start-Label fuer das erste Feld aus "heute/jetzt" – nur beim Formatwechsel, damit
+   dort kein Wert im alten Format (z. B. 06:00 bei Wechsel auf Wochentag) stehen bleibt.
+   getHours/getDay/getDate ist reines Auslesen der aktuellen Zeit (keine Datums-Arithmetik). */
+function defaultFirst(fmt){
+  const now=new Date();
+  if(fmt==="uhrzeit")return pad2(now.getHours())+":00";
+  if(fmt==="tage")return WD[(now.getDay()+6)%7];   /* getDay: So=0..Sa=6 -> WD-Index Mo=0 */
+  if(fmt==="datum")return pad2(now.getDate())+"."+pad2(now.getMonth()+1)+".";
+  return "";
 }
 
 /* Dropdowns */
@@ -214,38 +272,48 @@ chartTitleInput.oninput=e=>{state.chartTitle=e.target.value;draw();};
 
 const xformatSel=document.getElementById("xformat"),xlabelInput=document.getElementById("xlabel");
 xformatSel.onchange=e=>{state.xformat=e.target.value;
-  if(state.xformat!=="eigene"){state.xlabel=CAP[state.xformat];xlabelInput.value=state.xlabel;}
-  renderRows();draw();};
-document.getElementById("fillTime").onclick=()=>{
-  if(state.xformat==="eigene"||!state.data.length)return;
-  const seq=fillFrom(state.xformat,state.data[0].time);
-  state.data.forEach((row,i)=>{row.time=seq(i);});
-  renderRows();draw();};
+  if(state.xformat!=="eigene"){state.xlabel=CAP[state.xformat];xlabelInput.value=state.xlabel;
+    if(state.data.length)state.data[0].time=defaultFirst(state.xformat); /* erstes Feld auf heute/jetzt im neuen Format */
+  }
+  fillTimesData();renderRows();draw();}; /* Formatwechsel -> erstes Feld setzen, Spalte neu befuellen */
+document.getElementById("fillTime").onclick=()=>{fillTimesData();renderRows();draw();}; /* "neu fuellen" */
 
 /* Tabelle */
 const rowsEl=document.getElementById("rows");
-function renderRows(){rowsEl.innerHTML="";
+let rebuilding=false; /* true waehrend renderRows() -> verhindert, dass das durch innerHTML
+                         ausgeloeste focusout des ersten Feldes erneut eine Befuellung startet */
+function renderRows(){rebuilding=true;rowsEl.innerHTML="";
   const ph=PH[state.xformat]||"Label";
   state.data.forEach((row,i)=>{const div=document.createElement("div");div.className="data-row";
     div.innerHTML='<input type="text" placeholder="'+ph+'" value="'+escapeAttr(row.time)+'" data-i="'+i+'" data-k="time">'+
       '<input type="text" inputmode="decimal" value="'+(row.value==null?"":escapeAttr(String(row.value).replace(".",",")))+'" data-i="'+i+'" data-k="value">'+
       '<button class="del" data-i="'+i+'" title="Zeile löschen">×</button>';
-    rowsEl.appendChild(div);});}
+    rowsEl.appendChild(div);});rebuilding=false;}
 function escapeAttr(s){return String(s).replace(/"/g,"&quot;");}
+/* Zeit-Spalte aus state nachziehen, OHNE Neuaufbau -> Fokus bleibt, keine Events */
+function syncTimeInputs(){for(let i=0;i<state.data.length;i++){
+  const inp=rowsEl.querySelector('input[data-i="'+i+'"][data-k="time"]');
+  if(inp&&inp.value!==state.data[i].time)inp.value=state.data[i].time;}}
 rowsEl.addEventListener("input",e=>{const i=+e.target.dataset.i,k=e.target.dataset.k;
   if(k==="time")state.data[i].time=e.target.value;
   else if(k==="value"){const n=parseFloat(e.target.value.replace(",",".")); state.data[i].value=isNaN(n)?null:n;}
   draw();});
+/* Auslöser der Befuellung: Verlassen des ERSTEN Zeit-Felds (blur/Enter), nicht bei jeder
+   Eingabe. Befuellung stoesst nur draw() an (kein renderRows) und triggert sich nicht selbst. */
+rowsEl.addEventListener("focusout",e=>{
+  if(rebuilding)return;
+  const t=e.target;if(!t.dataset||t.dataset.k!=="time"||+t.dataset.i!==0)return;
+  if(fillTimesData()){syncTimeInputs();draw();}});
 rowsEl.addEventListener("keydown",e=>{
   if(e.key!=="Enter"||e.target.tagName!=="INPUT")return;
   e.preventDefault();
   const i=+e.target.dataset.i,k=e.target.dataset.k;
-  if(i===state.data.length-1){state.data.push({time:"",value:null});renderRows();draw();}
+  if(i===state.data.length-1){state.data.push({time:"",value:null});fillTimesData();renderRows();draw();}
   const next=rowsEl.querySelector('input[data-i="'+(i+1)+'"][data-k="'+k+'"]');
   if(next){next.focus();next.select();}
 });
-rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);renderRows();draw();}});
-document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});renderRows();draw();};
+rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);fillTimesData();renderRows();draw();}});
+document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});fillTimesData();renderRows();draw();};
 document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
   state.markMaxPos=null;state.markMinPos=null;
   state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
@@ -506,7 +574,9 @@ function applyStateToUI(){
 }
 
 const saved=loadState();
-if(saved){Object.assign(state,saved);applyStateToUI();}
+if(saved){Object.assign(state,saved);
+  if(state.xformat==="stunden")state.xformat="eigene"; /* Format "Stunden" entfernt -> bestehende Labels als "Eigene" weiterfuehren */
+  applyStateToUI();}
 else{state.data=exampleData();}
 renderRows();
 new ResizeObserver(draw).observe(canvas.parentElement);
