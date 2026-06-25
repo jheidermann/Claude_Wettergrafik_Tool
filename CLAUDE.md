@@ -101,7 +101,7 @@ Breite/Höhe in `state.markMaxPos` / `state.markMinPos` → layoutübergreifend,
 solange ein Label nicht manuell positioniert ist. Bewusst **kein** Bildrand-
 Anschlag und **keine** Verbindungslinie zum Punkt (beides bei Bedarf nachrüstbar).
 
-## x-Achsen-Auto-Befüllung (Logik, Stand: 22.06.2026)
+## x-Achsen-Auto-Befüllung (Logik, Stand: 25.06.2026)
 
 **Prinzip.** Die Zeitspalte (x-Achse) füllt sich aus dem **Inhalt des ersten
 Feldes** – nicht aus einem festen Startwert. Zentrale Funktion `fillTimesData()`
@@ -123,11 +123,17 @@ manuell korrigierte.
   **reiner Zahlen-Arithmetik** (`addDays`/`daysInMonth`/`isLeap`) – bewusst
   **kein** `Date.setDate`/UTC (vermeidet Zeitzonen-Verschiebung). Eingabeformat
   gespiegelt: mit/ohne Jahr, 2- oder 4-stellig (`parseDateParts`/`fmtDateParts`).
+- **Jahre:** +1 Jahr, **vierstellig** (`2024`→`2025`). Erstes Feld muss genau
+  vier Ziffern sein, sonst keine Befüllung (`fillFrom`-Zweig). **x-Achse
+  beschriftet nur jedes 10. Jahr ab dem Startjahr** – fester `stepK=10` in
+  `renderChart` statt der sonstigen Auto-Ausdünnung (z. B. 1975, 1985, … 2025);
+  Tick-Striche an denselben Stellen. (Kantenfall: unter 11 Jahren nur das
+  Startjahr-Label – bewusst, „jedes 10. ab Start".)
 - **Eigene:** keine Automatik.
 
 **Formatwechsel.** Wechsel im Dropdown setzt das **erste Feld auf „heute/jetzt"**
 im neuen Format (`defaultFirst`: aktuelle Stunde / heutiger Wochentag / heutiges
-Datum), dann Spalte neu befüllen. Grund: der alte Wert im alten Format wäre
+Datum / aktuelles Jahr), dann Spalte neu befüllen. Grund: der alte Wert im alten Format wäre
 sinnlos (sonst bliebe z. B. `06:00` bei Wechsel auf Wochentag stehen). Das ist
 **bewusst anderes** Verhalten als beim Tippen/Blur (dort bleibt Feld 1 stehen) –
 zwei Auslöser, zwei gewollte Verhalten.
@@ -152,8 +158,45 @@ nach (`syncTimeInputs`, setzt `input.value` → feuert **keine** Events) und ruf
 `innerHTML=""`) ausgelöste `focusout` ab, sodass die Befüllung sich nicht selbst
 neu triggert.
 
+## CSV-Import (Logik, Stand: 25.06.2026)
+
+**Button „CSV laden"** (neben „Beispiel laden"). Liest eine **zweispaltige CSV
+lokal im Browser** (`<input type=file>` + `FileReader` – kein Upload, kein Server,
+offline). Funktionen `parseCSV` (lesen) und `applyCSV` (anwenden). Anlass: 50er-
+Zeitreihen (z. B. Hitzetage je Jahr) tippt man nicht von Hand – die frühere
+„kein CSV-Import"-Park-Regel ist damit überholt.
+
+**Format.** Spalte 1 = x-Label, Spalte 2 = Wert (Reihenfolge zählt, nicht der
+Spaltenname). **Trenner automatisch** aus der ersten Zeile (Komma/Semikolon/Tab).
+**Kopfzeile** wird erkannt, wenn ihre zweite Zelle keine Zahl ist – ihr Text wird
+**Reihenname** (`state.name`). Werte mit Komma- **oder** Punkt-Dezimal; leere
+Zelle → `null` (Lücke). **Sind alle Labels vierstellige Jahre → Format
+automatisch „Jahre"** (`xformat`/`xlabel`).
+
+**Beim Import gesetzt:** Daten, Reihenname, ggf. „Jahre"-Format,
+`markMaxPos`/`markMinPos` zurück auf zentriert. **Einheit wird geleert** (eine
+CSV kennt keine Einheit – du trägst „Tage" o. ä. selbst ein). Diagrammtyp,
+Farbe, Layout bleiben unangetastet.
+
+**Station aus dem Dateinamen** (`stationFromName`): Endung weg, `_`/`-` →
+Leerzeichen, ein **führendes Wort, das dem Reihennamen entspricht** (z. B.
+`hitzetage`) fällt weg, Wortanfänge groß → `hitzetage_magdeburg.csv` →
+**„Magdeburg"**. Wird **als Überschrift vorbefüllt** (`state.chartTitle`,
+editierbar) **und** in `state.station` gemerkt.
+
+**Export-Dateiname-Fallback.** `basis = chartTitle || station || name`. Leerst du
+die Überschrift (z. B. weil die Chyron-Überschrift auf Sendung kommt), trägt die
+PNG-Datei trotzdem die Station (`DDMMYYYY_Magdeburg_…`). `state.station` wird im
+`localStorage` mitgesichert; `applyStateToUI` zeigt sie als Platzhalter, wenn das
+Feld leer ist. **„Beispiel laden"** setzt Überschrift **und** Station zurück
+(kein hängender Titel über Beispieldaten).
+
+**Bewusst (noch) nicht:** Dezimalwerte mit Komma-Trenner kollidieren mit dem
+Dezimal-Komma → dann CSV mit **Semikolon** trennen (für ganzzahlige Reihen wie
+Hitzetage irrelevant; „im Auge behalten"). Kein Spalten-Zuordnungs-UI, kein
+Mehrreihen-Import.
+
 ## Bewusst NICHT umgesetzt / geparkt
-- Kein CSV-Import – Daten bleiben manuell (~24–30 Zeilen). Nicht vorschlagen.
 - Geparkt für später: zweite y-Achse, Wettersymbole, mehrere Datenreihen,
   animierter Export. Erst auf Nachfrage aufgreifen.
 

@@ -106,6 +106,7 @@
         <option value="uhrzeit">Uhrzeit (00:00)</option>
         <option value="tage">Wochentage (Mo, Di …)</option>
         <option value="datum">Datum (TT.MM.)</option>
+        <option value="jahre">Jahre (2020 …)</option>
         <option value="eigene">Eigene</option>
       </select>
     </div>
@@ -128,8 +129,10 @@
     <div class="btns">
       <button class="btn primary" id="addRow">+ Zeile</button>
       <button class="btn" id="loadExample">Beispiel laden</button>
+      <button class="btn" id="loadCsv">CSV laden</button>
       <button class="btn" id="clearAll">Leeren</button>
     </div>
+    <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
   </aside>
 
   <main class="stage">
@@ -164,11 +167,11 @@ const SERIES=[
   {name:"Schnee",unit:"cm"},{name:"UV-Index",unit:"UV"},
   {name:"__custom__",label:"Eigene …"}
 ];
-const PH ={uhrzeit:"z. B. 06:00",tage:"z. B. Mo",datum:"z. B. 14.06.",eigene:"Label"};
-const CAP={uhrzeit:"Uhrzeit",tage:"Wochentag",datum:"Datum",eigene:""};
+const PH ={uhrzeit:"z. B. 06:00",tage:"z. B. Mo",datum:"z. B. 14.06.",jahre:"z. B. 2020",eigene:"Label"};
+const CAP={uhrzeit:"Uhrzeit",tage:"Wochentag",datum:"Datum",jahre:"Jahr",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
-const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",layout:"full",data:[]};
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",station:"",layout:"full",data:[]};
 
 function exampleData(){
   const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
@@ -223,6 +226,7 @@ function fillFrom(fmt,first){
   if(fmt==="uhrzeit"){const m=f.match(/^(\d{1,2})/);if(!m)return null;const h=(+m[1])%24;return i=>pad2((h+i)%24)+":00";}
   if(fmt==="tage")return weekdaySeq(f);
   if(fmt==="datum"){const p=parseDateParts(f);if(!p)return null;return i=>fmtDateParts(addDays(p,i));}
+  if(fmt==="jahre"){const m=f.match(/^(\d{4})$/);if(!m)return null;const y=+m[1];return i=>String(y+i);} /* vierstellig, +1 Jahr */
   return null;
 }
 
@@ -244,6 +248,7 @@ function defaultFirst(fmt){
   if(fmt==="uhrzeit")return pad2(now.getHours())+":00";
   if(fmt==="tage")return WD[(now.getDay()+6)%7];   /* getDay: So=0..Sa=6 -> WD-Index Mo=0 */
   if(fmt==="datum")return pad2(now.getDate())+"."+pad2(now.getMonth()+1)+".";
+  if(fmt==="jahre")return String(now.getFullYear());
   return "";
 }
 
@@ -315,13 +320,60 @@ rowsEl.addEventListener("keydown",e=>{
 rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);fillTimesData();renderRows();draw();}});
 document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});fillTimesData();renderRows();draw();};
 document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
-  state.markMaxPos=null;state.markMinPos=null;
+  state.markMaxPos=null;state.markMinPos=null;state.station="";state.chartTitle="";chartTitleInput.value="";chartTitleInput.placeholder=state.name;
   state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
   seriesSel.value="Temperatur";nameField.style.display="none";
   nameInput.value=state.name;unitInput.value=state.unit;renderRows();draw();};
 document.getElementById("clearAll").onclick=()=>{
   if(state.data.length&&!confirm("Alle Werte löschen?"))return;
   state.data=[];renderRows();draw();};
+
+/* ---- CSV-Import: zweispaltige Datei (Label, Wert), lokal im Browser gelesen ----
+   Trenner automatisch (Komma/Semikolon/Tab). Erste Zeile = Kopfzeile, wenn ihre
+   zweite Spalte keine Zahl ist (deren Text wird Reihenname). Wert mit Komma- ODER
+   Punkt-Dezimal; leere Zelle -> null. Sind ALLE Labels vierstellige Jahre, schaltet
+   der Import auf Format "Jahre". Hinweis: Dezimalwerte gehoeren in eine mit Semikolon
+   getrennte CSV (sonst kollidiert das Dezimal-Komma mit dem Spalten-Komma). */
+function parseCSV(text){
+  const lines=String(text).replace(/^﻿/,"").split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
+  if(!lines.length)return null;
+  const delim=lines[0].indexOf(";")>=0?";":(lines[0].indexOf("\t")>=0?"\t":",");
+  const cell=l=>l.split(delim).map(c=>c.trim());
+  const isNum=s=>s!==""&&isFinite(parseFloat(String(s).replace(",",".")));
+  let seriesName="",start=0;
+  const first=cell(lines[0]);
+  if(first.length>=2&&!isNum(first[1])){seriesName=first[1];start=1;} /* Kopfzeile erkannt */
+  const rows=[];
+  for(let i=start;i<lines.length;i++){const c=cell(lines[i]);
+    const label=(c[0]||"").trim(),raw=(c[1]==null?"":c[1]).trim();
+    const num=parseFloat(raw.replace(",","."));
+    rows.push({time:label,value:(raw===""||isNaN(num))?null:num});}
+  return {rows,seriesName};
+}
+/* Station aus dem Dateinamen ableiten: Endung weg, _/- zu Leerzeichen, ein fuehrendes
+   Wort, das dem Reihennamen entspricht (z. B. "hitzetage"), faellt weg, dann Wortanfaenge
+   gross. hitzetage_magdeburg.csv -> "Magdeburg". Nur ein Vorschlag (Platzhalter/Export). */
+function stationFromName(fileName,seriesName){
+  let s=String(fileName).replace(/\.[^.]+$/,"").replace(/[_\-]+/g," ").trim();
+  if(seriesName){const esc=seriesName.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    s=s.replace(new RegExp("^"+esc+"\\s+","i"),"").trim();}
+  return s.replace(/\b\w/g,m=>m.toUpperCase());
+}
+function applyCSV(text,fileName){
+  const parsed=parseCSV(text);
+  if(!parsed||!parsed.rows.length){alert("CSV konnte nicht gelesen werden – erwartet zwei Spalten (Label, Wert), z. B. 1975,13");return;}
+  state.data=parsed.rows;
+  if(parsed.seriesName)state.name=parsed.seriesName; /* Reihenname aus Kopfzeile (Spalte 2) */
+  state.unit="";                                     /* CSV kennt keine Einheit -> leeren, Nutzer traegt sie ein */
+  state.markMaxPos=null;state.markMinPos=null;
+  if(state.data.every(d=>/^\d{4}$/.test(String(d.time).trim()))){state.xformat="jahre";state.xlabel="Jahr";}
+  state.station=stationFromName(fileName,state.name); /* Station aus Dateiname */
+  state.chartTitle=state.station;                     /* Ueberschrift-Feld vorbefuellen (editierbar); leerst du es, bleibt die Station Export-Fallback */
+  applyStateToUI();renderRows();draw();
+}
+document.getElementById("loadCsv").onclick=()=>document.getElementById("csvFile").click();
+document.getElementById("csvFile").onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>{applyCSV(r.result,f.name);e.target.value="";};r.readAsText(f);};
 xlabelInput.oninput=e=>{state.xlabel=e.target.value;draw();};
 document.getElementById("markMax").onchange=e=>{state.markMax=e.target.checked;draw();};
 document.getElementById("markMin").onchange=e=>{state.markMin=e.target.checked;draw();};
@@ -435,6 +487,7 @@ function renderChart(ctx,W,H,c,boxes){
   const pxStep=state.type==="bar"?band:(n>1?innerW/(n-1):innerW);
   let stepK=Math.max(1,Math.ceil(n/10));
   while(stepK<n&&pxStep*stepK<minGap)stepK++;
+  if(state.xformat==="jahre")stepK=10;   /* Jahre: fester 10er-Takt ab Startjahr (durch User gewuenscht) */
   const tickH=Math.round(c.axis*0.4);
   for(let i=0;i<n;i+=stepK){
     const t=pts[i].time||"";if(!t)continue;
@@ -559,7 +612,7 @@ function doExport(){
   const cfg=layoutCfg();
   const suffix=state.layout==="mod"?"_Mod-Grafik":(state.layout==="quad"?"_App-Grafik":"_Vollbild-Grafik");
   const {w,h}=exportDims();
-  const basis=state.chartTitle.trim()||state.name;
+  const basis=state.chartTitle.trim()||state.station||state.name;
   const now=new Date(),stamp=pad2(now.getDate())+pad2(now.getMonth()+1)+now.getFullYear();
   const ec=document.createElement("canvas");ec.width=w;ec.height=h;
   const ex=ec.getContext("2d");
@@ -583,7 +636,7 @@ function applyStateToUI(){
   chartTitleInput.value=state.chartTitle||"";
   if(SERIES.find(s=>s.name===state.name)){seriesSel.value=state.name;nameField.style.display="none";}
   else{seriesSel.value="__custom__";nameField.style.display="";}
-  nameInput.value=state.name||"";chartTitleInput.placeholder=state.name||"";
+  nameInput.value=state.name||"";chartTitleInput.placeholder=state.station||state.name||"";
   unitInput.value=state.unit||"";
   colorSel.value=state.color;updateSwatch();
   xformatSel.value=state.xformat;xlabelInput.value=state.xlabel||"";
