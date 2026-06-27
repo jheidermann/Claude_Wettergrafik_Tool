@@ -7,9 +7,20 @@ Einzelne HTML-Datei zur Visualisierung von Wetterdaten fürs Fernsehen
 ## Verhalten
 - **Autospeichern (kein Bug, beabsichtigt):** Der komplette Arbeitsstand
   (Werte, Überschrift, Reihe, Einheit, Farbe, Typ, x-Format,
-  Achsenbeschriftung, Höchst-/Tiefstwert, Layout, gezogene Label-Positionen)
-  wird automatisch im Browser gespeichert (`localStorage`, Key `wettergrafik:v1`)
-  und beim Öffnen wiederhergestellt. Ohne gespeicherten Stand startet das Beispiel.
+  Achsenbeschriftung, Höchst-/Tiefstwert, „Werte ausblenden", Layout, gezogene
+  Label-Positionen) wird automatisch im Browser gespeichert (`localStorage`, Key
+  `wettergrafik:v1`) und beim Öffnen wiederhergestellt. Ohne gespeicherten Stand
+  startet das Beispiel.
+- **Speichern entkoppelt von `draw()` (Stand: 28.06.2026):** `draw()` ruft nicht
+  mehr direkt `saveState()`, sondern `scheduleSave()` – ein 400-ms-Debounce, damit
+  schnelle Aktionen (Label-Ziehen, Fenster-Resize) nicht bei jedem Frame in den
+  `localStorage` schreiben. Drag-Ende (`endMarkDrag`) sichert sofort; ein
+  `beforeunload`-Listener flusht den ausstehenden Stand beim Schließen. Von außen
+  identisches Verhalten, nur ohne Schreibflut.
+- **Datenverlust-Schutz (Stand: 28.06.2026):** „Beispiel laden" und „CSV laden"
+  fragen vor dem Überschreiben nach (`confirm`), **aber nur wenn bereits Werte
+  eingegeben sind** (`state.data.some(d=>d.value!=null)`). Leerer/frischer Stand →
+  keine Rückfrage. „Leeren" fragt wie bisher.
 
 ## Harte Regeln (nicht verletzen)
 - **Eine HTML-Datei, Canvas pur.** Muss offline laufen: keine Bibliothek,
@@ -45,6 +56,9 @@ nächsten Abschnitt.)
 - Bewusst behutsam belassen: Gitter als Volllinie mit kräftiger Nulllinie,
   x-Achse mit Tick-Strichen. (Moderne Alternativen – gepunktetes Gitter,
   Petrol-Grundlinie, keine Ticks – wurden getestet, aber nicht übernommen.)
+- Aufräumung (28.06.2026): ungenutzte Keys `dot` und `tickGap` aus den
+  Layout-Objekten entfernt (wurden nirgends gelesen). Beim Nachjustieren der
+  Proportionen also keine Wirkung mehr erwarten/suchen.
 
 **App-Export (1:1)** – dritte Exportvariante **1080×1080 px** für den
 MDR-App-Ausspielweg (Layout-Umschalter „App (1:1)"). Eigenes Layout-Objekt
@@ -100,6 +114,23 @@ Breite/Höhe in `state.markMaxPos` / `state.markMinPos` → layoutübergreifend,
 `null` = zentriert (Default). Der Auto-Flip (oben/unten je nach Platz) greift nur,
 solange ein Label nicht manuell positioniert ist. Bewusst **kein** Bildrand-
 Anschlag und **keine** Verbindungslinie zum Punkt (beides bei Bedarf nachrüstbar).
+Am Canvas ist `touch-action:none` gesetzt, damit das Ziehen auf Touchgeräten nicht
+mit dem Scrollen kollidiert.
+
+**„Werte ausblenden" – leerer Rahmen (Stand: 28.06.2026).** Schalter im Bedienfeld
+(`#hideValues`, `state.hideValues`). Ist er aktiv, zeichnet `renderChart` **nur den
+Rahmen** (Achsen, Gitter, x-/y-Beschriftung, Einheit, Titel + Akzentbalken, ggf.
+Mod-Trennlinie), aber **keine** Kurve/Balken und **keine** Extremwert-Marken
+(beide Blöcke per `if(!state.hideValues)` übersprungen). **Kernpunkt:** Die
+y-Skala und die x-Labels werden weiter aus den **eingegebenen Werten** berechnet
+(die Werte bleiben im `state`, nur die Darstellung entfällt) – dadurch sind leerer
+und gefüllter Export **deckungsgleich**, beim Einblenden auf Sendung springt nichts.
+Die schalter-unabhängige Kopffreiheit (`headFrac`, s. o.) sorgt zusätzlich dafür,
+dass die Obergrenze nicht wandert. **Anwendung:** Werte eintragen → Häkchen an →
+leeren Rahmen exportieren → Häkchen aus → gefüllte Grafik exportieren. Der Schalter
+wird mitgespeichert. Export-Button bleibt aktiv, solange Werte vorhanden sind
+(leerer Rahmen ganz ohne Daten ist nicht vorgesehen – ohne Daten keine Skala).
+Geparkt: ein Button „beide PNGs auf einmal".
 
 ## x-Achsen-Auto-Befüllung (Logik, Stand: 25.06.2026)
 
@@ -177,6 +208,13 @@ automatisch „Jahre"** (`xformat`/`xlabel`).
 `markMaxPos`/`markMinPos` zurück auf zentriert. **Einheit wird geleert** (eine
 CSV kennt keine Einheit – du trägst „Tage" o. ä. selbst ein). Diagrammtyp,
 Farbe, Layout bleiben unangetastet.
+
+**Leer-Warnungen (Stand: 28.06.2026):** Datei mit echten Werten vorhanden →
+Rückfrage vor dem Überschreiben (s. Datenverlust-Schutz oben). Werden zwar Zeilen,
+aber **keine** numerischen Werte erkannt (Spalte 2 leer/nicht-numerisch, oder
+Dezimal-Komma kollidiert mit Komma-Trenner), kommt jetzt ein **expliziter
+Hinweis** (`applyCSV` prüft `rows.some(r=>r.value!=null)`) inkl. Tipp auf
+Semikolon-Trennung – statt stummer Leeransicht.
 
 **Station aus dem Dateinamen** (`stationFromName`): Endung weg, `_`/`-` →
 Leerzeichen, ein **führendes Wort, das dem Reihennamen entspricht** (z. B.

@@ -51,7 +51,7 @@
   .toolbar .meta{font-size:13px;color:var(--ink-soft);}
   .toolbar .grp{display:flex;gap:8px;}
   .canvas-box{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:16px;position:relative;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:14px;}
-  canvas{aspect-ratio:16/9;max-width:100%;max-height:100%;border-radius:10px;}
+  canvas{aspect-ratio:16/9;max-width:100%;max-height:100%;border-radius:10px;touch-action:none;}
   .hint{font-size:13px;color:var(--ink-soft);margin-top:14px;}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
   .btn:disabled:hover{border-color:var(--border);}
@@ -119,6 +119,7 @@
     <div class="field" style="margin-top:16px;">
       <label class="check"><input type="checkbox" id="markMax"> Höchstwert hervorheben</label>
       <label class="check" style="margin-top:9px;"><input type="checkbox" id="markMin"> Tiefstwert hervorheben</label>
+      <label class="check" style="margin-top:9px;"><input type="checkbox" id="hideValues"> Werte ausblenden (leerer Rahmen)</label>
     </div>
 
     <div class="divider"></div>
@@ -171,7 +172,7 @@ const PH ={uhrzeit:"z. B. 06:00",tage:"z. B. Mo",datum:"z. B. 14.06.",jahre:"z. 
 const CAP={uhrzeit:"Uhrzeit",tage:"Wochentag",datum:"Datum",jahre:"Jahr",eigene:""};
 const WD=["Mo","Di","Mi","Do","Fr","Sa","So"];
 
-const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",station:"",layout:"full",data:[]};
+const state={name:"Temperatur",unit:"°C",type:"line",color:"#FF8B00",xformat:"uhrzeit",xlabel:"Uhrzeit",markMax:false,markMin:false,markMaxPos:null,markMinPos:null,chartTitle:"",station:"",layout:"full",hideValues:false,data:[]};
 
 function exampleData(){
   const v=[12,11,11,10,10,9,9,10,12,15,18,20,22,23,24,24,23,22,20,18,16,15,14,13];
@@ -319,7 +320,9 @@ rowsEl.addEventListener("keydown",e=>{
 });
 rowsEl.addEventListener("click",e=>{if(e.target.classList.contains("del")){state.data.splice(+e.target.dataset.i,1);fillTimesData();renderRows();draw();}});
 document.getElementById("addRow").onclick=()=>{state.data.push({time:"",value:null});fillTimesData();renderRows();draw();};
-document.getElementById("loadExample").onclick=()=>{state.data=exampleData();state.name="Temperatur";state.unit="°C";
+document.getElementById("loadExample").onclick=()=>{
+  if(state.data.some(d=>d.value!=null)&&!confirm("Aktuelle Werte durch das Beispiel ersetzen?"))return;
+  state.data=exampleData();state.name="Temperatur";state.unit="°C";
   state.markMaxPos=null;state.markMinPos=null;state.station="";state.chartTitle="";chartTitleInput.value="";chartTitleInput.placeholder=state.name;
   state.xformat="uhrzeit";state.xlabel="Uhrzeit";xformatSel.value="uhrzeit";xlabelInput.value="Uhrzeit";
   seriesSel.value="Temperatur";nameField.style.display="none";
@@ -362,6 +365,7 @@ function stationFromName(fileName,seriesName){
 function applyCSV(text,fileName){
   const parsed=parseCSV(text);
   if(!parsed||!parsed.rows.length){alert("CSV konnte nicht gelesen werden – erwartet zwei Spalten (Label, Wert), z. B. 1975,13");return;}
+  if(!parsed.rows.some(r=>r.value!=null)){alert("In der CSV wurden keine Werte gefunden – ist Spalte 2 leer oder nicht numerisch? Bei Dezimalwerten mit Komma die CSV bitte mit Semikolon trennen.");return;}
   state.data=parsed.rows;
   if(parsed.seriesName)state.name=parsed.seriesName; /* Reihenname aus Kopfzeile (Spalte 2) */
   state.unit="";                                     /* CSV kennt keine Einheit -> leeren, Nutzer traegt sie ein */
@@ -373,10 +377,12 @@ function applyCSV(text,fileName){
 }
 document.getElementById("loadCsv").onclick=()=>document.getElementById("csvFile").click();
 document.getElementById("csvFile").onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+  if(state.data.some(d=>d.value!=null)&&!confirm("Aktuelle Werte durch die CSV ersetzen?")){e.target.value="";return;}
   const r=new FileReader();r.onload=()=>{applyCSV(r.result,f.name);e.target.value="";};r.readAsText(f);};
 xlabelInput.oninput=e=>{state.xlabel=e.target.value;draw();};
 document.getElementById("markMax").onchange=e=>{state.markMax=e.target.checked;draw();};
 document.getElementById("markMin").onchange=e=>{state.markMin=e.target.checked;draw();};
+document.getElementById("hideValues").onchange=e=>{state.hideValues=e.target.checked;draw();}; /* leerer Rahmen, gleiche Achsen */
 document.getElementById("typeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   state.type=b.dataset.type;[...e.currentTarget.children].forEach(x=>x.classList.toggle("active",x===b));draw();});
 document.getElementById("layoutSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
@@ -502,7 +508,10 @@ function renderChart(ctx,W,H,c,boxes){
     ctx.fillStyle=INK;ctx.font="600 "+c.caption+"px "+FONT;ctx.textAlign="center";ctx.textBaseline="alphabetic";
     ctx.fillText(state.xlabel,c.padL+plotW/2,bottom+c.captionGap);}
 
-  /* Serie */
+  /* Serie – bei "Werte ausblenden" bleibt der Rahmen (Achsen/Gitter/Beschriftung) stehen,
+     aber Kurve/Balken und Marken werden nicht gezeichnet. Die Achsen-Skala wird oben weiter
+     aus den eingegebenen Werten berechnet -> leerer und gefüllter Export sind deckungsgleich. */
+  if(!state.hideValues){
   if(state.type==="bar"){
     const bw=Math.max(2,band*0.6),base=y(Math.max(0,vMin));
     pts.forEach((p,i)=>{const yy=y(p.value);
@@ -518,9 +527,10 @@ function renderChart(ctx,W,H,c,boxes){
     ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(X(i),y(p.value)):ctx.moveTo(X(i),y(p.value)));
     ctx.strokeStyle=state.color;ctx.lineWidth=c.lineW;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
   }
+  } /* Ende "Werte ausblenden"-Guard für die Serie */
 
-  /* Markante Punkte */
-  if(state.markMax||state.markMin){
+  /* Markante Punkte (entfallen bei ausgeblendeten Werten) */
+  if(!state.hideValues&&(state.markMax||state.markMin)){
     const top=c.padT;
     const drawMark=(idx,isMax)=>{
       const px=X(idx),py=y(pts[idx].value);
@@ -551,12 +561,12 @@ function renderChart(ctx,W,H,c,boxes){
   }
 }
 
-const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,tickGap:30,caption:44,captionGap:124,lineW:10,dot:9, mark:42,markR:13,markGap:14};
+const EXPORT_FULL={padL:150,padR:140,padT:140,padB:180,title:58,titleY:96,axis:40,caption:44,captionGap:124,lineW:10,mark:42,markR:13,markGap:14};
 const EXPORT_RIGHT=Object.assign({},EXPORT_FULL,{padR:470,topRule:true,topRuleH:11,topRuleA:0.5}); /* ~24% rechts frei für Moderation + Abstand; topRule = dünne Petrol-Trennlinie am oberen Rand. topRuleH = Bandhöhe, topRuleA = Deckkraft oben (die beiden Stellschrauben). */
 /* App-Quadrat 1080×1080 (MDR-App): eigene Proportionen statt von FULL abgeleitet –
    schmaler, dafuer relativ mehr vertikaler Raum fuer den Graphen; Schrift fuer
    kleine Screens bewusst groß gehalten (auf dem Handy gut lesbar). */
-const EXPORT_SQUARE={padL:120,padR:80,padT:152,padB:172,title:52,titleY:90,axis:38,tickGap:30,caption:42,captionGap:126,lineW:9,dot:8,mark:40,markR:12,markGap:12};
+const EXPORT_SQUARE={padL:120,padR:80,padT:152,padB:172,title:52,titleY:90,axis:38,caption:42,captionGap:126,lineW:9,mark:40,markR:12,markGap:12};
 function layoutCfg(){return state.layout==="mod"?EXPORT_RIGHT:(state.layout==="quad"?EXPORT_SQUARE:EXPORT_FULL);}
 /* Export-/Vorschaumaße je Layout: Quadrat fuer die App, sonst 16:9 */
 function exportDims(){return state.layout==="quad"?{w:1080,h:1080}:{w:1920,h:1080};}
@@ -576,7 +586,7 @@ function draw(){
   MARK_BOXES.max=MARK_BOXES.min=null;
   renderChart(ctx,w,h,layoutCfg(),MARK_BOXES);
   exportBtn.disabled=!state.data.some(d=>d.value!=null&&isFinite(d.value));
-  saveState();
+  scheduleSave();
 }
 
 /* ---- Drag & Drop der Extremwert-Labels ---- */
@@ -627,6 +637,10 @@ exportBtn.onclick=doExport;
 /* ---- Persistenz: Stand automatisch im Browser sichern/wiederherstellen ---- */
 const STORE_KEY="wettergrafik:v1";
 function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
+/* Autospeichern von draw() entkoppelt: schnelle Aufrufe (Label-Ziehen, Fenster-Resize)
+   werden gebündelt, statt bei jedem Frame in localStorage zu schreiben. */
+let saveTimer=null;
+function scheduleSave(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=null;saveState();},400);}
 function loadState(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return null;
   const o=JSON.parse(raw);if(!o||!Array.isArray(o.data))return null;return o;}catch(e){return null;}}
 function setSegActive(id,attr,val){[...document.getElementById(id).children]
@@ -642,6 +656,7 @@ function applyStateToUI(){
   xformatSel.value=state.xformat;xlabelInput.value=state.xlabel||"";
   document.getElementById("markMax").checked=!!state.markMax;
   document.getElementById("markMin").checked=!!state.markMin;
+  document.getElementById("hideValues").checked=!!state.hideValues;
   setSegActive("typeSeg","type",state.type);
   setSegActive("layoutSeg","layout",state.layout);
 }
@@ -654,6 +669,7 @@ else{state.data=exampleData();}
 renderRows();
 new ResizeObserver(draw).observe(canvas.parentElement);
 draw();
+window.addEventListener("beforeunload",saveState); /* ausstehende gebündelte Speicherung beim Schließen sichern */
 </script>
 </body>
 </html>
