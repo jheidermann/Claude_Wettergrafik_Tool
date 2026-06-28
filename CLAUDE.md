@@ -80,8 +80,9 @@ rechts knapp vor der Moderationsfläche ausgelaufen. Umsetzung als Erstes in
 `renderChart` über ein **Offscreen-Canvas** (vertikaler Verlauf zeichnen, dann
 horizontaler Verlauf per `destination-in` als Maske – bewusst Offscreen, sonst
 würde die Maske den ganzen Haupt-Canvas mitlöschen). **Zwei Stellschrauben** im
-Layout-Objekt `EXPORT_RIGHT`: `topRuleH` (Bandhöhe, 11 px) und `topRuleA`
-(Deckkraft oben, 0,5 = dezent). Die horizontale Auslauf-Position steckt in den
+Layout-Objekt `EXPORT_RIGHT`: `topRuleH` (Bandhöhe, **34 px** – am 28.06.2026 von
+11 auf 34 erhöht, weil das Band im WeatherPresenter zu schmal wirkte und tiefer in
+die Grafik reichen sollte) und `topRuleA` (Deckkraft oben, 0,5 = dezent). Die horizontale Auslauf-Position steckt in den
 Gradient-Stops in `renderChart` (~0,72–0,78 der Breite, knapp vor `padR`).
 **Vollbild und App 1:1 bewusst ohne Linie** (kein Flag) – bei Bedarf später per
 `topRule` nachrüstbar.
