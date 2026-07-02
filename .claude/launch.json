@@ -4,7 +4,7 @@
     {
       "name": "wettergrafik",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["/Users/jorgheidermann/Desktop/Claude_Wettergrafik_Tool/.claude/preview-server.js"],
+      "runtimeArgs": ["/Users/jorgheidermann/Claude/Projekte/Wettergrafik-Tool/.claude/preview-server.js"],
       "port": 4321
     }
   ]

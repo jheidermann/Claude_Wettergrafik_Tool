@@ -4,7 +4,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = "/Users/jorgheidermann/Desktop/Claude_Wettergrafik_Tool";
+const ROOT = "/Users/jorgheidermann/Claude/Projekte/Wettergrafik-Tool";
 const PORT = Number(process.env.PORT) || 4321;
 
 const TYPES = {
